@@ -1,4 +1,5 @@
 # interactive-cheatsheet
+<img width="1598" height="1580" alt="image" src="https://github.com/user-attachments/assets/ff41dbe4-aace-48c9-a931-f222e29ac8d3" />
 
 A **topic-agnostic** [Claude Code](https://claude.com/claude-code) skill that turns any "give me a list of commands for X" request into a **paired markdown + interactive HTML cheatsheet**. Works for Postgres, Docker, Kubernetes, AWS CLI, gcloud, git, Terraform, ffmpeg, openssl, curl, systemd, jq, or any other CLI ecosystem.
 
@@ -138,7 +139,7 @@ Anything where you'd benefit from a personal, parameterised reference card. A st
 
 Any of these become a single sentence to Claude — it'll ask which specific CLIs to cover, fetch real `--help` output, and write you both files.
 
-<img width="1598" height="1580" alt="image" src="https://github.com/user-attachments/assets/ff41dbe4-aace-48c9-a931-f222e29ac8d3" />
+
 
 
 
