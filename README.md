@@ -18,8 +18,6 @@ Claude produces two files in your repo's `docs/` folder:
 - `docs/postgres-setup.md` — plain markdown reference.
 - `docs/postgres-setup.html` — interactive page with inputs for `host`, `port`, `admin_user`, `db_name`, `schema`, `table`, `owner`, etc. Type a new database name → every snippet updates. Click Copy → clipboard has the substituted command.
 
-![cheatsheet preview placeholder — variables panel at top, code blocks with copy buttons below](./preview.png)
-
 ## When the skill triggers
 
 Claude picks this skill up automatically when you ask for:
