@@ -12,6 +12,7 @@ Produce two paired artifacts for any command/runbook/how-to topic:
    - A sticky **Variables** panel at the top (text inputs for the values the reader is likely to change)
    - Code blocks that **live-update** as the inputs change (via `{{var_name}}` placeholders inside `data-template` attributes)
    - A **Copy** button on every code block that copies the *rendered* (substituted) text
+   - An expandable **Explain** panel under each code block that describes the command, lists every flag used (sourced from the tool's real `--help` output where possible), and suggests other useful flags
    - A **Reset to defaults** button
    - No external CSS / JS / font dependencies — everything inline so it works offline and from `file://`
 
@@ -86,13 +87,39 @@ Start from `resources/template.html` in this skill folder. Substitute the four t
 </div>
 ```
 
-**Code block markup:**
+**Code block markup (with explain panel):**
 
 ```html
 <div class="block">
-  <span class="lang">sql</span>
+  <span class="lang">bash</span>
   <button class="copy" type="button">Copy</button>
-  <pre><code data-template="CREATE DATABASE {{db_name}};"></code></pre>
+  <pre><code data-template="psql -h {{host}} -p {{port}} -U {{admin_user}}"></code></pre>
+  <details class="explain">
+    <summary>Explain</summary>
+    <div class="explain-body">
+      <p>Opens an interactive psql session against the server at
+        <code class="tmpl" data-template="{{host}}:{{port}}"></code> as
+        <code class="tmpl" data-template="{{admin_user}}"></code>.</p>
+      <h4>Flags used</h4>
+      <dl class="flags">
+        <dt><code>-h, --host=HOSTNAME</code></dt>
+        <dd>Database server host or socket directory.</dd>
+        <dt><code>-p, --port=PORT</code></dt>
+        <dd>Database server port (defaults to 5432).</dd>
+        <dt><code>-U, --username=USERNAME</code></dt>
+        <dd>Database user name (defaults to your OS user).</dd>
+      </dl>
+      <h4>Other flags you might want</h4>
+      <dl class="flags">
+        <dt><code>-d, --dbname=DBNAME</code></dt>
+        <dd>Connect to a specific database immediately.</dd>
+        <dt><code>-c, --command=COMMAND</code></dt>
+        <dd>Run a single SQL command and exit — useful for scripting.</dd>
+        <dt><code>-f, --file=FILENAME</code></dt>
+        <dd>Execute commands from a file, then exit.</dd>
+      </dl>
+    </div>
+  </details>
 </div>
 ```
 
@@ -102,11 +129,30 @@ Start from `resources/template.html` in this skill folder. Substitute the four t
 
 **Backslashes** (e.g. psql `\c`, `\l`, `\dt`) are fine as-is.
 
-### 5. Default to placing the variables panel before the first section, then keep section order matching the markdown
+**Template substitution works on any element with `data-template`**, not just `<code>` blocks — so an explanation paragraph can include live values like `<code class="tmpl" data-template="{{db_name}}"></code>`.
+
+### 5. Populate the Explain panel from real `--help` output
+
+Each CLI command in a code block should have an accompanying `<details class="explain">` panel. To author it:
+
+1. **Run `--help`** (or `-h`, or `man <cmd>`) on the host to get authentic flag documentation. Examples: `psql --help`, `createdb --help`, `docker run --help`, `kubectl get --help`, `aws s3 cp help`. These commands are read-only and safe to execute. Capture the output once and reuse across blocks that share the same tool.
+2. **Description** — one or two sentences in plain English describing what the *specific* invocation does. Mention the live values via `data-template` spans where it helps.
+3. **Flags used** — list every flag that actually appears in this snippet, with the exact short/long forms and the description copied (lightly rewritten if needed) from `--help`.
+4. **Other flags you might want** — 3–6 alternative flags from the same `--help` that are commonly useful for related scenarios (different output formats, dry-run modes, force overrides, alternative connection options, etc.). Pick flags that broaden the user's mental model of the tool.
+
+For **SQL statements** or other non-CLI snippets (e.g. `CREATE DATABASE`, `kubectl apply -f`), `--help` isn't available. Instead:
+
+- Describe what the statement does.
+- Under "Flags used" list the clauses present (`OWNER`, `ENCODING`, `TEMPLATE`, etc.) with brief descriptions.
+- Under "Other clauses you might want" list 3–6 alternatives (`TABLESPACE`, `CONNECTION LIMIT`, `IS_TEMPLATE`, etc.) from the official docs.
+
+If a snippet is trivial (a single `\c db_name`, a `\l`), an Explain panel may be unnecessary — use judgement.
+
+### 6. Default to placing the variables panel before the first section, then keep section order matching the markdown
 
 The HTML should mirror the markdown's structure so the two files feel like the same doc in two skins.
 
-### 6. Offer to open the HTML in the browser
+### 7. Offer to open the HTML in the browser
 
 After writing both files, offer (or just do, if the user is clearly happy with the result) `open <path>` to launch it.
 
@@ -124,6 +170,7 @@ After writing both files, offer (or just do, if the user is clearly happy with t
 - All `<` and `>` characters inside `data-template` attribute values are escaped.
 - The markdown file uses literal default values (not `{{tokens}}`).
 - The two files share a basename and live in the same directory.
+- Every non-trivial code block has a `<details class="explain">` panel with description + flags-used + other-flags, sourced from real `--help` output where available.
 
 ## Example invocation
 

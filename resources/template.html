@@ -122,6 +122,75 @@
       }
       .copy:hover { background: var(--btn-hover); }
       .copy.copied { background: #234e3c; color: #c6f6d5; border-color: #2f6b50; }
+
+      .explain {
+        border-top: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .explain > summary {
+        cursor: pointer;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        list-style: none;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: color 120ms ease;
+      }
+      .explain > summary::-webkit-details-marker { display: none; }
+      .explain > summary::before {
+        content: "▸";
+        font-size: 9px;
+        transition: transform 120ms ease;
+        display: inline-block;
+      }
+      .explain[open] > summary::before { transform: rotate(90deg); }
+      .explain > summary:hover { color: var(--text); }
+      .explain-body {
+        padding: 4px 14px 14px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text);
+      }
+      .explain-body h4 {
+        margin: 14px 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+      .explain-body p { margin: 4px 0 8px; }
+      .explain-body dl.flags {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(160px, max-content) 1fr;
+        gap: 4px 14px;
+      }
+      .explain-body dl.flags dt {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .explain-body dl.flags dt code {
+        background: transparent;
+        color: var(--accent);
+        padding: 0;
+        border: none;
+      }
+      .explain-body dl.flags dd { margin: 0; color: var(--text); }
+      .explain-body code.tmpl {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent-2);
+      }
+
       hr.sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
       code.inline {
         background: var(--panel-2);
@@ -155,15 +224,38 @@
 
     <!--
       CONTENT_BLOCK
-      Insert <h2>…</h2>, <p>…</p>, and code blocks here. Each code block:
+      Insert <h2>…</h2>, <p>…</p>, and code blocks here. Each code block has the
+      shape below — note the optional <details class="explain"> panel that
+      expands to describe the command + its flags.
 
         <div class="block">
           <span class="lang">bash</span>
           <button class="copy" type="button">Copy</button>
           <pre><code data-template="…command with {{var}} placeholders…"></code></pre>
+          <details class="explain">
+            <summary>Explain</summary>
+            <div class="explain-body">
+              <p>What this command does, in one or two sentences. Inline
+                substitution works: <code class="tmpl" data-template="{{db_name}}"></code>.</p>
+              <h4>Flags used</h4>
+              <dl class="flags">
+                <dt><code>-h, --host=HOSTNAME</code></dt>
+                <dd>Database server host (from <code>psql --help</code>).</dd>
+                <!-- repeat dt/dd for each flag actually present in the command -->
+              </dl>
+              <h4>Other flags you might want</h4>
+              <dl class="flags">
+                <dt><code>-c, --command=COMMAND</code></dt>
+                <dd>Run a single SQL command and exit — useful for scripting.</dd>
+                <!-- 2-5 alternative flags worth knowing about -->
+              </dl>
+            </div>
+          </details>
         </div>
 
-      Use {{var_name}} inside data-template to reference inputs by their data-var attribute.
+      Use {{var_name}} inside data-template to reference inputs by their data-var
+      attribute. Any element with data-template gets live substitution, not just
+      <code> blocks — so explanations can mention live values too.
       For literal '<' or '>' inside data-template, write &lt; and &gt;.
     -->
     {{CONTENT}}
@@ -174,7 +266,7 @@
         const DEFAULTS = {{DEFAULTS_JSON}};
 
         const inputs = document.querySelectorAll("input[data-var]");
-        const codes = document.querySelectorAll("code[data-template]");
+        const templated = document.querySelectorAll("[data-template]");
 
         function readVars() {
           const vars = {};
@@ -192,12 +284,12 @@
 
         function render() {
           const vars = readVars();
-          codes.forEach((c) => {
-            const tpl = decode(c.getAttribute("data-template"));
+          templated.forEach((el) => {
+            const tpl = decode(el.getAttribute("data-template"));
             const out = tpl.replace(/\{\{(\w+)\}\}/g, (_, key) =>
               Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "{{" + key + "}}"
             );
-            c.textContent = out;
+            el.textContent = out;
           });
         }
 
@@ -205,7 +297,9 @@
 
         document.querySelectorAll(".copy").forEach((btn) => {
           btn.addEventListener("click", async () => {
-            const code = btn.parentElement.querySelector("code");
+            // Find the <code> inside the same .block, ignoring any inside .explain.
+            const block = btn.closest(".block");
+            const code = block ? block.querySelector("pre > code") : null;
             const text = code ? code.textContent : "";
             try {
               await navigator.clipboard.writeText(text);
