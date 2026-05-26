@@ -1,0 +1,1123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ssh connections</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-2: #1c2230;
+        --border: #262d3b;
+        --text: #e6e8ee;
+        --muted: #8b94a7;
+        --accent: #7aa2ff;
+        --accent-2: #9ae6b4;
+        --code-bg: #0b0d12;
+        --code-fg: #e6e8ee;
+        --btn: #2a3142;
+        --btn-hover: #38415a;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        line-height: 1.55;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 24px 80px;
+      }
+      h1 { font-size: 28px; margin: 0 0 6px; }
+      h2 { font-size: 20px; margin: 36px 0 10px; color: var(--accent); }
+      p, li { color: var(--text); }
+      .subtitle { color: var(--muted); margin: 0 0 24px; }
+      .vars {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 18px 8px;
+        position: sticky;
+        top: 12px;
+        z-index: 5;
+        box-shadow: var(--shadow);
+      }
+      .vars h2 { margin: 0 0 12px; font-size: 16px; color: var(--accent-2); }
+      .vars-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 14px;
+      }
+      .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+      .field label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .field input {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 120ms ease;
+      }
+      .field input:focus { border-color: var(--accent); }
+      .reset {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        margin-top: 6px;
+      }
+      .reset:hover { color: var(--text); border-color: var(--accent); }
+
+      .block {
+        position: relative;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin: 10px 0 18px;
+        overflow: hidden;
+      }
+      .block .lang {
+        position: absolute;
+        top: 8px;
+        left: 12px;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .block pre {
+        margin: 0;
+        padding: 30px 14px 14px;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: var(--code-fg);
+        white-space: pre;
+      }
+      .copy {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: var(--btn);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .copy:hover { background: var(--btn-hover); }
+      .copy.copied { background: #234e3c; color: #c6f6d5; border-color: #2f6b50; }
+
+      .explain {
+        border-top: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .explain > summary {
+        cursor: pointer;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        list-style: none;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: color 120ms ease;
+      }
+      .explain > summary::-webkit-details-marker { display: none; }
+      .explain > summary::before {
+        content: "▸";
+        font-size: 9px;
+        transition: transform 120ms ease;
+        display: inline-block;
+      }
+      .explain[open] > summary::before { transform: rotate(90deg); }
+      .explain > summary:hover { color: var(--text); }
+      .explain-body {
+        padding: 4px 14px 14px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text);
+      }
+      .explain-body h4 {
+        margin: 14px 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+      .explain-body p { margin: 4px 0 8px; }
+      .explain-body dl.flags {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(160px, max-content) 1fr;
+        gap: 4px 14px;
+      }
+      .explain-body dl.flags dt {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .explain-body dl.flags dt code {
+        background: transparent;
+        color: var(--accent);
+        padding: 0;
+        border: none;
+      }
+      .explain-body dl.flags dd { margin: 0; color: var(--text); }
+      .explain-body code.tmpl {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent-2);
+      }
+      .warn {
+        border-left: 3px solid #f6ad55;
+        background: rgba(246, 173, 85, 0.08);
+        padding: 8px 12px;
+        margin: 8px 0;
+        border-radius: 4px;
+        color: #f6ad55;
+      }
+
+      hr.sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+      code.inline {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>ssh connections</h1>
+    <p class="subtitle">
+      Change the variables below — every snippet on the page updates live. Click <strong>Explain</strong>
+      under any command to see what each flag does, plus other flags worth knowing.
+    </p>
+
+    <section class="vars" aria-label="Variables">
+      <h2>Variables</h2>
+      <div class="vars-grid">
+        <div class="field">
+          <label for="user">user</label>
+          <input id="user" data-var="user" value="alice" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="host">host</label>
+          <input id="host" data-var="host" value="server.example.com" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="port">port</label>
+          <input id="port" data-var="port" value="22" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="key_file">key file</label>
+          <input id="key_file" data-var="key_file" value="~/.ssh/id_ed25519" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="comment">key comment</label>
+          <input id="comment" data-var="comment" value="alice@laptop" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="local_port">local port</label>
+          <input id="local_port" data-var="local_port" value="8080" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="remote_port">remote port</label>
+          <input id="remote_port" data-var="remote_port" value="5432" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="remote_host">remote host</label>
+          <input id="remote_host" data-var="remote_host" value="db.internal" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="jump_host">jump host</label>
+          <input id="jump_host" data-var="jump_host" value="bastion.example.com" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="jump_user">jump user</label>
+          <input id="jump_user" data-var="jump_user" value="alice" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="remote_path">remote path</label>
+          <input id="remote_path" data-var="remote_path" value="/var/www/app" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="local_path">local path</label>
+          <input id="local_path" data-var="local_path" value="./deploy.tar.gz" autocomplete="off" />
+        </div>
+      </div>
+      <button class="reset" id="reset-btn" type="button">Reset to defaults</button>
+    </section>
+
+    <h2>1. Basic connect</h2>
+    <p>Plain connection using your default identity and the default port (22):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh {{user}}@{{host}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Opens an interactive shell on <code class="tmpl" data-template="{{host}}"></code> as
+            <code class="tmpl" data-template="{{user}}"></code>. ssh picks the first matching identity
+            from the agent or <code>~/.ssh/id_*</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>destination</code></dt><dd><code>[user@]host</code> — the connection target.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-l USER</code></dt><dd>Login user — alternative to <code>user@host</code>.</dd>
+            <dt><code>-A</code></dt><dd>Enable agent forwarding (use sparingly — exposes your keys to the remote root).</dd>
+            <dt><code>-X / -Y</code></dt><dd>Enable X11 forwarding (trusted with <code>-Y</code>).</dd>
+            <dt><code>-q</code></dt><dd>Quiet mode — suppress warnings and the MOTD.</dd>
+            <dt><code>-t</code></dt><dd>Force pseudo-terminal allocation (useful when running interactive commands remotely).</dd>
+            <dt><code>-o OPTION</code></dt><dd>Inline any <code>ssh_config</code> directive, e.g. <code>-o StrictHostKeyChecking=no</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Non-default port — lowercase <code class="inline">-p</code> for ssh:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh -p {{port}} {{user}}@{{host}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Connects to <code class="tmpl" data-template="{{host}}"></code> on port
+            <code class="tmpl" data-template="{{port}}"></code> instead of the default 22.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-p PORT</code></dt><dd>Remote port to connect to. Note: <code>scp</code> and <code>sftp</code> use <code>-P</code> (uppercase).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-b BIND_ADDR</code></dt><dd>Source address to bind locally — picks a specific outgoing interface.</dd>
+            <dt><code>-4 / -6</code></dt><dd>Force IPv4 / IPv6 resolution.</dd>
+            <dt><code>-c CIPHER</code></dt><dd>Override the cipher list (rare — only when negotiating with legacy servers).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Pick a specific private key — bypasses the agent and any <code class="inline">IdentityFile</code>
+      in your config:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh -i {{key_file}} {{user}}@{{host}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Authenticates to <code class="tmpl" data-template="{{host}}"></code> using
+            <code class="tmpl" data-template="{{key_file}}"></code>. If you also want ssh to
+            <em>only</em> try this key (and not fall back to other agent keys), add
+            <code>-o IdentitiesOnly=yes</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-i IDENTITY_FILE</code></dt><dd>Selects a private key file for public-key authentication.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-o IdentitiesOnly=yes</code></dt><dd>Only try the key(s) given via <code>-i</code>/<code>IdentityFile</code> — avoids "too many auth failures" on hosts that count agent keys.</dd>
+            <dt><code>-I PKCS11</code></dt><dd>Use a PKCS#11 shared library (e.g. for an HSM / smartcard).</dd>
+            <dt><code>-F CONFIGFILE</code></dt><dd>Alternative client config file (instead of <code>~/.ssh/config</code>).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>2. Generate a key pair</h2>
+    <p>Modern Ed25519 — small, fast, secure. Press Enter at the passphrase prompt to leave it empty,
+      or pick a passphrase for anything that lives long-term on disk:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh-keygen -t ed25519 -C &quot;{{comment}}&quot; -f {{key_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Generates an Ed25519 key pair at
+            <code class="tmpl" data-template="{{key_file}}"></code> (private) and
+            <code class="tmpl" data-template="{{key_file}}"></code><code>.pub</code> (public),
+            stamping the public key with the comment
+            <code class="tmpl" data-template="{{comment}}"></code> so you can recognise it later.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-t TYPE</code></dt><dd>Key algorithm: <code>ed25519</code>, <code>rsa</code>, <code>ecdsa</code>, <code>ed25519-sk</code> / <code>ecdsa-sk</code> (hardware-backed).</dd>
+            <dt><code>-C COMMENT</code></dt><dd>Comment string appended to the public key — usually <code>user@host</code> so you can tell keys apart in <code>authorized_keys</code>.</dd>
+            <dt><code>-f FILE</code></dt><dd>Output path for the private key. <code>.pub</code> is appended for the public half.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-N PASSPHRASE</code></dt><dd>Provide the passphrase on the command line (e.g. <code>-N ""</code> for an empty one — non-interactive).</dd>
+            <dt><code>-a ROUNDS</code></dt><dd>KDF rounds for the encrypted private key (higher = slower to brute-force; default 16).</dd>
+            <dt><code>-q</code></dt><dd>Quiet — suppress the "Generating…" banner.</dd>
+            <dt><code>-o</code></dt><dd>Use the new OpenSSH key format (default for ed25519).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Legacy RSA for hosts that don't accept Ed25519 yet (older network gear, some CI runners). Always
+      pick at least 4096 bits:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh-keygen -t rsa -b 4096 -C &quot;{{comment}}&quot; -f ~/.ssh/id_rsa"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Generates a 4096-bit RSA key pair at <code>~/.ssh/id_rsa</code> with the comment
+            <code class="tmpl" data-template="{{comment}}"></code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-t rsa</code></dt><dd>RSA algorithm.</dd>
+            <dt><code>-b BITS</code></dt><dd>Key length. 4096 is the modern minimum; 2048 is now considered weak.</dd>
+            <dt><code>-C COMMENT</code></dt><dd>Identifying comment on the public key.</dd>
+            <dt><code>-f FILE</code></dt><dd>Output filename.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-t ecdsa -b 521</code></dt><dd>NIST P-521 ECDSA — smaller than RSA, broader support than ed25519 on some BMC / appliance firmware.</dd>
+            <dt><code>-t ed25519-sk</code></dt><dd>Ed25519 key bound to a FIDO2 security key (YubiKey etc.).</dd>
+            <dt><code>-Z CIPHER</code></dt><dd>Cipher used to encrypt the private key on disk.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>3. Inspect / fingerprint a key</h2>
+    <p>Show the fingerprint and comment of a public key — the same line GitHub / GitLab display when you
+      add a key to your account:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh-keygen -lf {{key_file}}.pub"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Prints <code>BITS HASH COMMENT (TYPE)</code> for
+            <code class="tmpl" data-template="{{key_file}}"></code><code>.pub</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-l</code></dt><dd>Show fingerprint of the specified public-key file.</dd>
+            <dt><code>-f FILE</code></dt><dd>Input file (public key, or a <code>known_hosts</code> file).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-F HOST</code></dt><dd>Look up <code>HOST</code> in <code>known_hosts</code> and print its fingerprint.</dd>
+            <dt><code>-R HOST</code></dt><dd>Remove all keys for <code>HOST</code> from <code>known_hosts</code> (fix for "remote host identification has changed").</dd>
+            <dt><code>-v</code></dt><dd>Add ASCII-art "randomart" — easier visual comparison than a hex digest.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Force SHA-256 (modern default — what GitHub etc. show). MD5 is still around for legacy tools:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh-keygen -E sha256 -lf {{key_file}}.pub"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Same as the previous command but locks the hash algorithm to SHA-256, regardless of the
+            host's default.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-E HASH</code></dt><dd>Fingerprint hash algorithm: <code>md5</code> or <code>sha256</code>.</dd>
+            <dt><code>-l, -f</code></dt><dd>Same as above — list mode on a specific file.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Re-derive a public key from a private key — saves the day when the <code class="inline">.pub</code>
+      half is lost:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh-keygen -y -f {{key_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads <code class="tmpl" data-template="{{key_file}}"></code>, prompts for the passphrase
+            if needed, and prints the public key to stdout. Pipe to a file to regenerate
+            <code class="tmpl" data-template="{{key_file}}"></code><code>.pub</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-y</code></dt><dd>Read a private key and output the corresponding public key.</dd>
+            <dt><code>-f FILE</code></dt><dd>Private key file to read.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-p</code></dt><dd>Change the passphrase on a key in place.</dd>
+            <dt><code>-c</code></dt><dd>Change the comment on a key.</dd>
+            <dt><code>-e -m RFC4716</code></dt><dd>Export the public key in the SECSH / SSH2 PEM-style format some appliances require.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>4. Add a key to ssh-agent</h2>
+    <p>Start an agent in the current shell. The <code class="inline">eval</code> trick sets
+      <code class="inline">SSH_AUTH_SOCK</code> and <code class="inline">SSH_AGENT_PID</code> in this
+      process. macOS users usually have launchd start one automatically:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="eval &quot;$(ssh-agent -s)&quot;"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p><code>ssh-agent -s</code> prints Bourne-shell <code>export</code> statements pointing at
+            the new agent socket. <code>eval</code> runs them in the current shell so subsequent
+            <code>ssh</code> / <code>ssh-add</code> commands find the agent.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-s</code></dt><dd>Emit Bourne-shell commands (vs <code>-c</code> for csh-style).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-a BIND_ADDR</code></dt><dd>Bind the agent socket at a specific path instead of a random tmpfile.</dd>
+            <dt><code>-t LIFE</code></dt><dd>Default lifetime for keys added later (e.g. <code>-t 3600</code>).</dd>
+            <dt><code>-D</code></dt><dd>Foreground mode (don't fork) — useful inside systemd / launchd units.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Add a key to the running agent. You'll be prompted for the passphrase once and then ssh will
+      reuse the unlocked key from memory:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh-add {{key_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Loads <code class="tmpl" data-template="{{key_file}}"></code> into the agent identified by
+            <code>$SSH_AUTH_SOCK</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>file</code></dt><dd>Path to the private key. With no argument, ssh-add tries the default keys (<code>id_ed25519</code>, <code>id_rsa</code>, etc.).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-t LIFE</code></dt><dd>Forget the key after LIFE seconds (e.g. <code>-t 1h</code>).</dd>
+            <dt><code>-c</code></dt><dd>Require confirmation each time the key is used (agent will prompt).</dd>
+            <dt><code>-d</code></dt><dd>Remove a key from the agent (use with the same file path).</dd>
+            <dt><code>-D</code></dt><dd>Remove <em>all</em> identities from the agent.</dd>
+            <dt><code>-x / -X</code></dt><dd>Lock / unlock the agent with a passphrase.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>List the fingerprints currently loaded — useful sanity check before a long debugging session:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh-add -l"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Prints the fingerprints of every identity currently in the agent. Exit code 1 means the
+            agent is empty, exit code 2 means it couldn't be contacted.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-l</code></dt><dd>List fingerprints of all loaded identities.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-L</code></dt><dd>List the actual public keys (suitable for pasting into <code>authorized_keys</code>).</dd>
+            <dt><code>-E HASH</code></dt><dd>Fingerprint hash format (<code>md5</code> or <code>sha256</code>).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>macOS only — store the passphrase in the login keychain so the key is loaded automatically on
+      reboot (modern flag is <code class="inline">--apple-use-keychain</code>; older docs and scripts
+      still use the original <code class="inline">-K</code>):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh-add --apple-use-keychain {{key_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Adds <code class="tmpl" data-template="{{key_file}}"></code> to the agent and saves the
+            passphrase in the macOS keychain. Pair with
+            <code>Host * &nbsp; UseKeychain yes &nbsp; AddKeysToAgent yes</code> in
+            <code>~/.ssh/config</code> for fully automatic loading.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--apple-use-keychain</code></dt><dd>(macOS) Store / retrieve the key passphrase via the Apple keychain. <code>-K</code> is the historic short form.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--apple-load-keychain</code></dt><dd>Reload all keychain-saved identities into the agent (good for login scripts).</dd>
+            <dt><code>-A</code></dt><dd>Add all identities listed by <code>ssh-add -l</code> back into a fresh agent.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>5. Copy your public key to a server</h2>
+    <p>Install your public key into the remote <code class="inline">~/.ssh/authorized_keys</code>, with
+      correct directory and file permissions handled for you:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh-copy-id -i {{key_file}}.pub {{user}}@{{host}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Logs into <code class="tmpl" data-template="{{host}}"></code> as
+            <code class="tmpl" data-template="{{user}}"></code> (you'll be prompted for the password
+            this one time), then appends
+            <code class="tmpl" data-template="{{key_file}}"></code><code>.pub</code> to
+            <code>~/.ssh/authorized_keys</code>, skipping duplicates.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-i IDENTITY_FILE</code></dt><dd>Public key to install. Defaults to the user's default identity if omitted.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-p PORT</code></dt><dd>Remote port — needed when sshd is not on 22.</dd>
+            <dt><code>-f</code></dt><dd>Force mode — skip the "is this key already there?" check.</dd>
+            <dt><code>-n</code></dt><dd>Dry-run — print what would happen without modifying the remote.</dd>
+            <dt><code>-s</code></dt><dd>Use sftp instead of remote-command (helps when the server allows sftp but disables shell execution).</dd>
+            <dt><code>-t TARGET_PATH</code></dt><dd>Use a non-default <code>authorized_keys</code> path.</dd>
+            <dt><code>-o OPTION</code></dt><dd>Forward an ssh-style option, e.g. <code>-o StrictHostKeyChecking=accept-new</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Manual fallback for minimal hosts that don't ship <code class="inline">ssh-copy-id</code> —
+      pipes the public key over ssh and appends it remotely. Also sets permissions correctly so sshd
+      doesn't reject the authorized_keys file:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="cat {{key_file}}.pub | ssh {{user}}@{{host}} 'mkdir -p ~/.ssh &amp;&amp; cat &gt;&gt; ~/.ssh/authorized_keys &amp;&amp; chmod 600 ~/.ssh/authorized_keys'"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>The local <code>cat</code> reads the public key; ssh runs a tiny shell pipeline on
+            <code class="tmpl" data-template="{{host}}"></code> that creates <code>~/.ssh</code> if
+            missing, appends the key, and locks <code>authorized_keys</code> down to mode 600 — sshd
+            will refuse the file otherwise.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>destination command</code></dt><dd>ssh runs <code>command</code> on the remote host instead of opening an interactive shell.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-o StrictHostKeyChecking=accept-new</code></dt><dd>Accept new host keys without prompting, but still reject changed ones.</dd>
+            <dt><code>-T</code></dt><dd>Disable pty allocation — cleaner output when piping.</dd>
+            <dt><code>-p PORT</code></dt><dd>Remote port.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>6. Local port forwarding</h2>
+    <p>Bring a remote service to a local port — for example, talk to a database that only listens on
+      the bastion's private network:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh -L {{local_port}}:{{remote_host}}:{{remote_port}} {{user}}@{{host}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>While the ssh connection is up, anything that connects to
+            <code>localhost:<span class="tmpl" data-template="{{local_port}}"></span></code> on your
+            laptop is tunnelled to
+            <code class="tmpl" data-template="{{remote_host}}"></code><code>:</code><code class="tmpl" data-template="{{remote_port}}"></code>
+            as seen from <code class="tmpl" data-template="{{host}}"></code>. The forward shuts down
+            when the ssh session ends.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-L [BIND:]PORT:HOST:HPORT</code></dt><dd>Forward local PORT to HOST:HPORT through the ssh connection. Without a bind address it listens on <code>127.0.0.1</code>; use <code>*:PORT:…</code> to bind all interfaces.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-N</code></dt><dd>Don't execute a remote command — pure tunnel mode.</dd>
+            <dt><code>-f</code></dt><dd>Fork to background once authentication succeeds.</dd>
+            <dt><code>-g</code></dt><dd>Allow remote hosts to connect to your local forwarded ports (otherwise they're loopback-only).</dd>
+            <dt><code>-o ExitOnForwardFailure=yes</code></dt><dd>Abort the connection if the forward can't be set up — avoid silently broken tunnels.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>7. Remote port forwarding</h2>
+    <p>Expose a local service to the remote host — handy when you want a teammate on the bastion to
+      reach a dev server on your laptop:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh -R {{remote_port}}:localhost:{{local_port}} {{user}}@{{host}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>On <code class="tmpl" data-template="{{host}}"></code>, port
+            <code class="tmpl" data-template="{{remote_port}}"></code> becomes a tunnel to
+            <code>localhost:<span class="tmpl" data-template="{{local_port}}"></span></code> on your
+            machine. By default the remote port only binds to the remote loopback — to expose it on
+            all remote interfaces sshd needs <code>GatewayPorts yes</code> in <code>sshd_config</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-R [BIND:]PORT:HOST:HPORT</code></dt><dd>Bind PORT on the remote host and forward connections back to HOST:HPORT on the local side.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-N -f</code></dt><dd>Background tunnel-only mode (same combo as <code>-L</code>).</dd>
+            <dt><code>-o ServerAliveInterval=30</code></dt><dd>Keep the tunnel alive across idle NAT timeouts.</dd>
+            <dt><code>-R 0:HOST:HPORT</code></dt><dd>Let the remote pick a free port and print it on connect (OpenSSH 5.x+).</dd>
+            <dt><code>-o ExitOnForwardFailure=yes</code></dt><dd>Hard-fail if the remote bind doesn't succeed.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>8. Dynamic SOCKS proxy</h2>
+    <p>Turn the ssh connection into a SOCKS5 proxy your browser or any SOCKS-aware client can use:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh -D {{local_port}} -N -f {{user}}@{{host}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <div class="warn"><strong>Security note:</strong> the SOCKS listener binds to
+            <code>127.0.0.1</code> by default but <em>anyone</em> with access to that local port (other
+            users on a shared machine, anything running in a container that shares your network
+            namespace) can pipe traffic through your account on
+            <code class="tmpl" data-template="{{host}}"></code>. Don't add an explicit bind address
+            like <code>0.0.0.0:<span class="tmpl" data-template="{{local_port}}"></span></code> unless
+            you really mean to share the tunnel with the LAN, and stop the background process when
+            you're done (<code>pkill -f &quot;ssh -D&quot;</code>).</div>
+          <p>Sets up a SOCKS5 proxy on local port
+            <code class="tmpl" data-template="{{local_port}}"></code>. Point your browser's proxy
+            settings at <code>SOCKS5 localhost:<span class="tmpl" data-template="{{local_port}}"></span></code>
+            and all of its traffic flows through <code class="tmpl" data-template="{{host}}"></code>.
+            <code>-N</code> tells ssh not to open a shell on the remote;
+            <code>-f</code> backgrounds it after auth, so you get your prompt back.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-D [BIND:]PORT</code></dt><dd>Open a dynamic SOCKS proxy on PORT (defaults to localhost-only bind).</dd>
+            <dt><code>-N</code></dt><dd>Do not execute a remote command — useful for pure forwarding sessions.</dd>
+            <dt><code>-f</code></dt><dd>Fork to the background after authentication, before the command runs.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-q</code></dt><dd>Quiet — silence the connection banners that would otherwise leak past <code>-f</code>.</dd>
+            <dt><code>-C</code></dt><dd>Request compression — small bandwidth saver over slow links.</dd>
+            <dt><code>-o ExitOnForwardFailure=yes</code></dt><dd>Don't background a broken proxy.</dd>
+            <dt><code>-o ServerAliveInterval=30</code></dt><dd>Keep the tunnel alive through idle NAT.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>9. Jump host (ProxyJump)</h2>
+    <p>Reach a private host through a bastion in a single command — ssh handles the middle hop for you:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh -J {{jump_user}}@{{jump_host}} {{user}}@{{host}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Connects to <code class="tmpl" data-template="{{host}}"></code> through
+            <code class="tmpl" data-template="{{jump_host}}"></code>. The jump host only sees an
+            encrypted relay — your password / agent stays local, and the final host's host key is
+            verified end-to-end. Comma-separate <code>-J</code> values for multi-hop
+            (<code>-J h1,h2,h3</code>).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-J [USER@]HOST[:PORT][,…]</code></dt><dd>ProxyJump — connect via one or more intermediate hosts.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-o ProxyJump=…</code></dt><dd>Equivalent of <code>-J</code> via the config option — useful in scripts that already pass other <code>-o</code>s.</dd>
+            <dt><code>-o ProxyCommand="…"</code></dt><dd>Lower-level escape hatch — run an arbitrary program to produce the connection (e.g. <code>aws ssm start-session</code>).</dd>
+            <dt><code>-W HOST:PORT</code></dt><dd>Forward stdio to HOST:PORT — the building block ssh uses internally for <code>-J</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>10. File transfer</h2>
+    <p>Push a single file. The trailing colon is the magic: <code class="inline">user@host:path</code>
+      is the remote target:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="scp {{local_path}} {{user}}@{{host}}:{{remote_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Copies <code class="tmpl" data-template="{{local_path}}"></code> to
+            <code class="tmpl" data-template="{{remote_path}}"></code> on
+            <code class="tmpl" data-template="{{host}}"></code>. Modern scp (OpenSSH 9+) uses the
+            sftp protocol under the hood — same wire format, safer filename handling.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>source target</code></dt><dd>One or more local files, then a remote destination of the form <code>[user@]host:path</code>.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-p</code></dt><dd>Preserve modification time, access time and modes.</dd>
+            <dt><code>-q</code></dt><dd>Quiet — no progress meter.</dd>
+            <dt><code>-C</code></dt><dd>Enable compression.</dd>
+            <dt><code>-l LIMIT</code></dt><dd>Bandwidth limit in Kbit/s.</dd>
+            <dt><code>-J DEST</code></dt><dd>Jump host (same as <code>ssh -J</code>).</dd>
+            <dt><code>-O</code></dt><dd>Use the legacy SCP protocol — only needed against very old servers without sftp-server.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Recursive directory copy:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="scp -r {{local_path}} {{user}}@{{host}}:{{remote_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Copies a directory tree to
+            <code class="tmpl" data-template="{{remote_path}}"></code>. For incremental syncs or
+            anything large, reach for <code>rsync</code> instead — it skips unchanged files and
+            resumes interrupted transfers.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-r</code></dt><dd>Recursively copy entire directories. Follows symbolic links.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-3</code></dt><dd>Route a remote-to-remote copy through the local machine (otherwise scp would set up host-to-host).</dd>
+            <dt><code>-A</code></dt><dd>Allow agent forwarding for this copy (rarely a good idea).</dd>
+            <dt><code>-T</code></dt><dd>Disable strict filename checking (only if you trust the remote).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Non-default port — uppercase <code class="inline">-P</code> for scp (different from
+      <code class="inline">ssh -p</code>):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="scp -P {{port}} {{local_path}} {{user}}@{{host}}:{{remote_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Same copy as before, but talking to sshd on port
+            <code class="tmpl" data-template="{{port}}"></code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-P PORT</code></dt><dd>Remote sshd port. Mnemonic: capital because <code>-p</code> is taken by "preserve times".</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-i IDENTITY_FILE</code></dt><dd>Use a specific private key for this copy.</dd>
+            <dt><code>-o OPTION</code></dt><dd>Pass any ssh_config option through to the underlying ssh.</dd>
+            <dt><code>-c CIPHER</code></dt><dd>Force a specific cipher — sometimes faster on CPU-bound transfers.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Interactive sftp session — great for browsing remote trees and pulling a few files at a time:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="sftp {{user}}@{{host}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Opens an interactive prompt. Useful commands: <code>ls</code>, <code>cd</code>,
+            <code>get FILE</code>, <code>put FILE</code>, <code>mget *.log</code>, <code>!cmd</code>
+            (run a local shell command), <code>bye</code> to quit.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>destination</code></dt><dd><code>[user@]host</code> connection target — same syntax as ssh.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-P PORT</code></dt><dd>Remote sshd port (uppercase, like scp).</dd>
+            <dt><code>-i IDENTITY_FILE</code></dt><dd>Use a specific private key.</dd>
+            <dt><code>-b BATCHFILE</code></dt><dd>Read commands from a script — sftp's automation mode.</dd>
+            <dt><code>-r</code></dt><dd>Recursive get/put with the in-session <code>get</code> / <code>put</code> commands.</dd>
+            <dt><code>-J DEST</code></dt><dd>Jump host.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>11. SSH config file</h2>
+    <p>Drop a block like this into <code class="inline">~/.ssh/config</code> and
+      <code class="inline">ssh app</code> is enough — every flag becomes a default for that host alias:</p>
+    <div class="block">
+      <span class="lang">sshconfig</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="Host app
+    HostName {{host}}
+    User {{user}}
+    Port {{port}}
+    IdentityFile {{key_file}}
+    ProxyJump {{jump_user}}@{{jump_host}}
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+    ForwardAgent no"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Defines a host alias <code>app</code>. All subsequent <code>ssh app</code>,
+            <code>scp file app:/path</code>, and <code>rsync app:/path .</code> calls inherit these
+            defaults. Per-host blocks are matched top-to-bottom; the first match for each option wins.</p>
+          <h4>Directives used</h4>
+          <dl class="flags">
+            <dt><code>Host PATTERN</code></dt><dd>Alias / glob pattern this block applies to.</dd>
+            <dt><code>HostName</code></dt><dd>Real DNS name or IP to connect to (lets <code>Host</code> stay a short nickname).</dd>
+            <dt><code>User</code></dt><dd>Login user.</dd>
+            <dt><code>Port</code></dt><dd>Remote sshd port.</dd>
+            <dt><code>IdentityFile</code></dt><dd>Private key to offer. Multiple lines allowed.</dd>
+            <dt><code>ProxyJump</code></dt><dd>Bastion(s) to hop through — same effect as <code>ssh -J</code>.</dd>
+            <dt><code>ServerAliveInterval</code></dt><dd>Send a keepalive probe every N seconds of idle time.</dd>
+            <dt><code>ServerAliveCountMax</code></dt><dd>Disconnect after this many missed keepalives.</dd>
+            <dt><code>ForwardAgent</code></dt><dd>Whether to forward your ssh-agent socket onto the remote (default <code>no</code> — keep it that way unless required).</dd>
+          </dl>
+          <h4>Other directives you might want</h4>
+          <dl class="flags">
+            <dt><code>IdentitiesOnly yes</code></dt><dd>Only offer keys listed in this block — stops "too many auth failures" on multi-key hosts.</dd>
+            <dt><code>UseKeychain yes</code></dt><dd>(macOS) Save / fetch the passphrase from the login keychain.</dd>
+            <dt><code>AddKeysToAgent yes</code></dt><dd>Add the unlocked key to the agent on first use.</dd>
+            <dt><code>StrictHostKeyChecking accept-new</code></dt><dd>Auto-trust first-seen host keys, still reject changes.</dd>
+            <dt><code>ControlMaster auto</code> &nbsp; <code>ControlPath …</code> &nbsp; <code>ControlPersist 10m</code></dt><dd>Multiplex multiple ssh sessions over one TCP connection — huge speed-up for tools that fire many ssh commands.</dd>
+            <dt><code>LocalForward / RemoteForward / DynamicForward</code></dt><dd>Config-file equivalents of <code>-L / -R / -D</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>12. Diagnose &amp; debug</h2>
+    <p>One <code class="inline">-v</code> shows the high-level negotiation — usually enough to spot the
+      problem:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh -v {{user}}@{{host}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Prints what ssh is trying at each step: which config blocks matched, which keys were
+            offered, why each one was accepted or rejected. Repeat the <code>v</code> for more detail.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-v</code></dt><dd>Verbose. Repeatable up to <code>-vvv</code>.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-E LOG_FILE</code></dt><dd>Write debug output to a file instead of stderr.</dd>
+            <dt><code>-q</code></dt><dd>The opposite — suppress all warnings.</dd>
+            <dt><code>-o LogLevel=DEBUG3</code></dt><dd>Equivalent to <code>-vvv</code> via config option (useful in scripts).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Full protocol trace — the next step when one <code class="inline">-v</code> didn't show the
+      problem:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh -vvv {{user}}@{{host}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Triple-verbose shows everything: kex negotiation, every host key fingerprint compared,
+            each identity in the agent, full reasons for "Permission denied (publickey)". The output
+            is huge — pipe to a file or to <code>less</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-vvv</code></dt><dd>Maximum verbosity. Equivalent to <code>-o LogLevel=DEBUG3</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Test SSH auth against a host that returns a banner instead of a shell (GitHub, GitLab, Bitbucket
+      all behave this way). <code class="inline">-T</code> disables pty allocation so the banner prints
+      cleanly:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh -T git@github.com"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>A successful run prints <code>Hi USERNAME! You've successfully authenticated, but GitHub
+            does not provide shell access.</code> and exits non-zero. Permission denied means the wrong
+            key was offered — chain <code>ssh -vT git@github.com</code> to see which one.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-T</code></dt><dd>Disable pseudo-terminal allocation. Useful when the remote just emits a banner.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-t</code></dt><dd>Opposite — <em>force</em> pty allocation, even when stdin isn't a terminal.</dd>
+            <dt><code>-o IdentitiesOnly=yes -i KEY</code></dt><dd>Test a specific key without interference from the agent.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Print the effective config ssh would apply to a host. No connection is opened — pure
+      config-merge:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ssh -G {{host}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Lists every resolved option (HostName, User, Port, IdentityFile, ProxyJump,
+            ControlMaster, ciphers, etc.) for
+            <code class="tmpl" data-template="{{host}}"></code>, merging
+            command-line flags, <code>~/.ssh/config</code>, and the system-wide
+            <code>/etc/ssh/ssh_config</code>. Indispensable for debugging "why is ssh picking the
+            wrong key?".</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-G</code></dt><dd>Print the effective configuration for the destination and exit.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-F CONFIGFILE</code></dt><dd>Test a config file other than <code>~/.ssh/config</code>.</dd>
+            <dt><code>-Q QUERY</code></dt><dd>Query supported algorithms (e.g. <code>ssh -Q kex</code>, <code>ssh -Q cipher</code>) — useful when matching old servers.</dd>
+            <dt><code>-V</code></dt><dd>Print client version (and exit) — sanity-check which OpenSSH you're actually running.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <script>
+      (function () {
+        const DEFAULTS = {
+          user: "alice",
+          host: "server.example.com",
+          port: "22",
+          key_file: "~/.ssh/id_ed25519",
+          comment: "alice@laptop",
+          local_port: "8080",
+          remote_port: "5432",
+          remote_host: "db.internal",
+          jump_host: "bastion.example.com",
+          jump_user: "alice",
+          remote_path: "/var/www/app",
+          local_path: "./deploy.tar.gz"
+        };
+
+        const inputs = document.querySelectorAll("input[data-var]");
+        const templated = document.querySelectorAll("[data-template]");
+
+        function readVars() {
+          const vars = {};
+          inputs.forEach((i) => {
+            vars[i.dataset.var] = i.value;
+          });
+          return vars;
+        }
+
+        function decode(html) {
+          const t = document.createElement("textarea");
+          t.innerHTML = html;
+          return t.value;
+        }
+
+        function render() {
+          const vars = readVars();
+          templated.forEach((el) => {
+            const tpl = decode(el.getAttribute("data-template"));
+            const out = tpl.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+              Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "{{" + key + "}}"
+            );
+            el.textContent = out;
+          });
+        }
+
+        inputs.forEach((i) => i.addEventListener("input", render));
+
+        document.querySelectorAll(".copy").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const block = btn.closest(".block");
+            const code = block ? block.querySelector("pre > code") : null;
+            const text = code ? code.textContent : "";
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch (e) {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              try { document.execCommand("copy"); } catch (_) {}
+              document.body.removeChild(ta);
+            }
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("copied");
+            }, 1200);
+          });
+        });
+
+        document.getElementById("reset-btn").addEventListener("click", () => {
+          inputs.forEach((i) => {
+            i.value = DEFAULTS[i.dataset.var] ?? "";
+          });
+          render();
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

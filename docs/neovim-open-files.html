@@ -1,0 +1,1118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>neovim — opening files & diffing revisions</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-2: #1c2230;
+        --border: #262d3b;
+        --text: #e6e8ee;
+        --muted: #8b94a7;
+        --accent: #7aa2ff;
+        --accent-2: #9ae6b4;
+        --code-bg: #0b0d12;
+        --code-fg: #e6e8ee;
+        --btn: #2a3142;
+        --btn-hover: #38415a;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        line-height: 1.55;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 24px 80px;
+      }
+      h1 { font-size: 28px; margin: 0 0 6px; }
+      h2 { font-size: 20px; margin: 36px 0 10px; color: var(--accent); }
+      p, li { color: var(--text); }
+      .subtitle { color: var(--muted); margin: 0 0 24px; }
+      .vars {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 18px 8px;
+        position: sticky;
+        top: 12px;
+        z-index: 5;
+        box-shadow: var(--shadow);
+      }
+      .vars h2 { margin: 0 0 12px; font-size: 16px; color: var(--accent-2); }
+      .vars-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 14px;
+      }
+      .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+      .field label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .field input {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 120ms ease;
+      }
+      .field input:focus { border-color: var(--accent); }
+      .reset {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        margin-top: 6px;
+      }
+      .reset:hover { color: var(--text); border-color: var(--accent); }
+
+      .block {
+        position: relative;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin: 10px 0 18px;
+        overflow: hidden;
+      }
+      .block .lang {
+        position: absolute;
+        top: 8px;
+        left: 12px;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .block pre {
+        margin: 0;
+        padding: 30px 14px 14px;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: var(--code-fg);
+        white-space: pre;
+      }
+      .copy {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: var(--btn);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .copy:hover { background: var(--btn-hover); }
+      .copy.copied { background: #234e3c; color: #c6f6d5; border-color: #2f6b50; }
+
+      .explain {
+        border-top: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .explain > summary {
+        cursor: pointer;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        list-style: none;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: color 120ms ease;
+      }
+      .explain > summary::-webkit-details-marker { display: none; }
+      .explain > summary::before {
+        content: "▸";
+        font-size: 9px;
+        transition: transform 120ms ease;
+        display: inline-block;
+      }
+      .explain[open] > summary::before { transform: rotate(90deg); }
+      .explain > summary:hover { color: var(--text); }
+      .explain-body {
+        padding: 4px 14px 14px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text);
+      }
+      .explain-body h4 {
+        margin: 14px 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+      .explain-body p { margin: 4px 0 8px; }
+      .explain-body dl.flags {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(160px, max-content) 1fr;
+        gap: 4px 14px;
+      }
+      .explain-body dl.flags dt {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .explain-body dl.flags dt code {
+        background: transparent;
+        color: var(--accent);
+        padding: 0;
+        border: none;
+      }
+      .explain-body dl.flags dd { margin: 0; color: var(--text); }
+      .explain-body code.tmpl {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent-2);
+      }
+      .explain-body .note {
+        background: rgba(122, 162, 255, 0.08);
+        border-left: 3px solid var(--accent);
+        padding: 6px 10px;
+        margin: 8px 0;
+        color: var(--text);
+        border-radius: 4px;
+        font-size: 12.5px;
+      }
+
+      hr.sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+      code.inline {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>neovim — opening files &amp; diffing revisions</h1>
+    <p class="subtitle">
+      Every useful way to open files in Neovim — including diffing across git revisions. Change the
+      variables below; every snippet updates live. Shell snippets use <code class="inline">bash</code>;
+      in-nvim ex commands use <code class="inline">vim</code>. Flag text captured from
+      <code class="inline">nvim --help</code> on Neovim 0.11.6;
+      <code class="inline">:Gvdiffsplit</code>-family snippets require the
+      <a href="https://github.com/tpope/vim-fugitive" style="color: var(--accent);">vim-fugitive</a>
+      plugin.
+    </p>
+
+    <section class="vars" aria-label="Variables">
+      <h2>Variables</h2>
+      <div class="vars-grid">
+        <div class="field">
+          <label for="file_path">file path</label>
+          <input id="file_path" data-var="file_path" value="src/app.ts" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="second_file">second file</label>
+          <input id="second_file" data-var="second_file" value="src/utils.ts" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="line_number">line number</label>
+          <input id="line_number" data-var="line_number" value="42" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="pattern">pattern</label>
+          <input id="pattern" data-var="pattern" value="TODO" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="git_rev">git rev</label>
+          <input id="git_rev" data-var="git_rev" value="HEAD~1" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="git_rev_compare">git rev compare</label>
+          <input id="git_rev_compare" data-var="git_rev_compare" value="main" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="quickfix_file">quickfix file</label>
+          <input id="quickfix_file" data-var="quickfix_file" value="errors.qf" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="startup_cmd">startup cmd</label>
+          <input id="startup_cmd" data-var="startup_cmd" value="set number" autocomplete="off" />
+        </div>
+      </div>
+      <button class="reset" id="reset-btn" type="button">Reset to defaults</button>
+    </section>
+
+    <h2>1. Open a single file</h2>
+    <p>The plain form — open a file at the cursor's last known position (or line 1 if there's no
+      shada entry):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Opens <code class="tmpl" data-template="{{file_path}}"></code> in a new Neovim
+            instance. With no flags, nvim reads your <code>init.lua</code>/<code>init.vim</code>,
+            loads plugins, and restores cursor position from shada if the file has been opened
+            before.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>[file ...]</code></dt><dd>Positional file arguments. Multiple files populate the args list — see section 2.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--clean</code></dt><dd>"Factory defaults" — skip user config, plugins, and shada. The fastest way to confirm a bug is config-related.</dd>
+            <dt><code>-u &lt;config&gt;</code></dt><dd>Use an alternate init file. <code>-u NONE</code> disables all init; <code>-u NORC</code> disables init but still loads plugins.</dd>
+            <dt><code>-i &lt;shada&gt;</code></dt><dd>Use a specific shada (Shared Data) file instead of the default. <code>-i NONE</code> disables shada entirely.</dd>
+            <dt><code>-n</code></dt><dd>No swap file — keep everything in memory. Useful for editing huge logs or files on slow disks.</dd>
+            <dt><code>--startuptime &lt;file&gt;</code></dt><dd>Write startup timing messages to a file — handy when investigating slow startup.</dd>
+            <dt><code>-V[N][file]</code></dt><dd>Verbose mode at level N, optionally logged to a file.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Jump straight to a specific line using <code class="inline">+LINE</code> (a positional
+      "execute this ex command" shortcut):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim +{{line_number}} {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Opens <code class="tmpl" data-template="{{file_path}}"></code> and runs the ex command
+            <code class="tmpl" data-template="{{line_number}}"></code> — which in ex syntax means
+            "go to that line number". Equivalent to
+            <code class="tmpl" data-template="nvim -c &quot;{{line_number}}&quot; {{file_path}}"></code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>+&lt;cmd&gt;</code></dt><dd>Execute an ex command after config and after the first file is loaded. A bare number is interpreted as a line address. Equivalent to <code>-c &lt;cmd&gt;</code>.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>+$</code></dt><dd>Jump to the last line of the file (<code>$</code> is the ex address for end-of-file).</dd>
+            <dt><code>-c &lt;cmd&gt;</code></dt><dd>Long form of <code>+&lt;cmd&gt;</code>. Can be given multiple times — they run in order. See section 5.</dd>
+            <dt><code>-S &lt;session&gt;</code></dt><dd>Source a session file after the first file is loaded — restores splits, tabs, buffers.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Jump to the first match of a pattern using <code class="inline">+/PATTERN</code>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim +/{{pattern}} {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Opens <code class="tmpl" data-template="{{file_path}}"></code> and runs an ex command
+            <code class="tmpl" data-template="/{{pattern}}"></code>, which is a forward search.
+            The cursor lands on the first match (or line 1 if no match).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>+/PATTERN</code></dt><dd>Special form of <code>+&lt;cmd&gt;</code> — runs a forward search for the pattern after the file loads.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>+?PATTERN</code></dt><dd>Same idea but searches backwards from end-of-file.</dd>
+            <dt><code>-c "set hlsearch"</code></dt><dd>Highlight all matches so subsequent <code>n</code>/<code>N</code> jumps are visible.</dd>
+          </dl>
+          <div class="note">Quote or escape the pattern if it contains shell metacharacters
+            (spaces, <code>$</code>, <code>*</code>, <code>(</code>, etc.).</div>
+        </div>
+      </details>
+    </div>
+
+    <h2>2. Open multiple files at once</h2>
+    <p>Pass multiple files — they populate the <em>args list</em> as separate buffers. Walk between
+      them with <code class="inline">:next</code> / <code class="inline">:prev</code>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim {{file_path}} {{second_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Both files are loaded as buffers; only the first one is shown.
+            <code>:args</code> lists the args list, <code>:next</code> moves to the next file,
+            <code>:prev</code> to the previous, <code>:last</code> / <code>:first</code> jump to
+            the ends.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>[file ...]</code></dt><dd>Positional. Each filename becomes an entry in the args list; the first is displayed.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--</code></dt><dd>End-of-options sentinel. Everything after is treated as a filename — needed if a filename starts with <code>-</code>.</dd>
+            <dt><code>-c "args"</code></dt><dd>Show the args list immediately after open.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Open multiple files split <strong>horizontally</strong> (stacked top-to-bottom):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim -o {{file_path}} {{second_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>One horizontal split per file. With <code>-oN</code>, exactly N windows are opened
+            (extra files become hidden buffers; if fewer files than N, empty windows are created).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-o[N]</code></dt><dd>Open N windows split horizontally (stacked). Default: one window per file argument.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-O[N]</code></dt><dd>Vertical splits instead — see next snippet.</dd>
+            <dt><code>-p[N]</code></dt><dd>Tab pages instead — see snippet after that.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Open multiple files split <strong>vertically</strong> (side by side — common for code
+      review):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim -O {{file_path}} {{second_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>One vertical split per file. Use <code>Ctrl-w h</code>/<code>l</code> to move between
+            windows, <code>Ctrl-w =</code> to equalise widths.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-O[N]</code></dt><dd>Open N vertical windows. Default: one per file. Capital-O.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-d</code></dt><dd>Diff mode — vertical split <em>and</em> diff-compare the files. See section 9.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Open each file in its own <strong>tab page</strong>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim -p {{file_path}} {{second_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Tab pages are full-screen workspaces — each can have its own window layout. Switch
+            with <code>gt</code> / <code>gT</code> or <code>:tabnext</code> / <code>:tabprev</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-p[N]</code></dt><dd>Open N tab pages. Default: one tab per file argument.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-c "tabdo &lt;cmd&gt;"</code></dt><dd>Run an ex command in every tab at startup — e.g. <code>tabdo Gitsigns</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>3. Read-only mode</h2>
+    <p>"View" mode — sets the <code class="inline">'readonly'</code> option. You can still force a
+      write with <code class="inline">:w!</code> if you really mean it:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim -R {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Equivalent to invoking nvim as <code>view</code>. <code>:set noreadonly</code> turns
+            it off; <code>:w!</code> bypasses it for a single write.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-R</code></dt><dd>Read-only (view) mode. Sets <code>'readonly'</code>; <code>:w</code> warns, <code>:w!</code> still writes.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-M</code></dt><dd>Hard-disable modifications — sets <code>'nomodifiable'</code> AND <code>'nowrite'</code>; even <code>:w!</code> is blocked.</dd>
+            <dt><code>-Z</code></dt><dd>Restricted mode — disables external commands (<code>:!</code>, <code>system()</code>, etc.).</dd>
+            <dt><code>-n</code></dt><dd>No swap file. Often paired with <code>-R</code> for viewing huge files.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Harder read-only — modifications are entirely disabled (<code class="inline">:w!</code>
+      blocked too):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim -M {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Sets <code>'nomodifiable'</code> and <code>'nowrite'</code>. Use this when reviewing a
+            production config and you want to be sure you can't accidentally save edits. Note: it's
+            "modifications-off", not just "writes-off" — you can't even change the buffer text.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-M</code></dt><dd>Modifications disabled — sets <code>'nomodifiable'</code> and <code>'nowrite'</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>The <code class="inline">view</code> alias — same as <code class="inline">nvim -R</code>,
+      shorter to type:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="view {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>On most installs <code>view</code> is a symlink to <code>nvim</code> that auto-enables
+            <code>-R</code>. Check with <code>ls -l $(command -v view)</code>.</p>
+        </div>
+      </details>
+    </div>
+
+    <h2>4. Recover from a swap file</h2>
+    <p>List recoverable swap files (no filename: nvim scans the swap directories and prints
+      candidates):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim -r"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Without a filename, <code>-r</code> prints a table of swap files Neovim knows about —
+            useful when you've forgotten what was open when nvim crashed.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-r</code></dt><dd>Recovery mode. With no file: list swap files. With a file: recover from its swap.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Recover a specific file from its swap:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim -r {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads the on-disk <code>.swp</code> file and reconstructs the buffer as it was at the
+            last write to swap (usually within seconds of the crash). Save it (<code>:w</code>) and
+            then delete the swap with <code>:! rm &lt;swapfile&gt;</code> or
+            <code>:e!</code> after confirming the file looks right.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-r &lt;file&gt;</code></dt><dd>Recover this specific file using its swap.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-L</code></dt><dd>Alias for <code>-r</code> (list swap files / recover).</dd>
+            <dt><code>-n</code></dt><dd>Open without creating a new swap file — useful after recovery to avoid creating a fresh <code>.swp</code> alongside the old one.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>5. Run an ex command at startup</h2>
+    <p>Run one ex command after config and the first file have loaded:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim -c &quot;{{startup_cmd}}&quot; {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Executes <code class="tmpl" data-template="{{startup_cmd}}"></code> after
+            <code>init.lua</code> runs and after the first file is loaded — so plugins are
+            available and the buffer exists when your command runs.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-c &lt;cmd&gt;</code></dt><dd>Execute an ex command after config and after the first file loads. May be repeated up to 10 times.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>+&lt;cmd&gt;</code></dt><dd>Short form, same effect.</dd>
+            <dt><code>--cmd &lt;cmd&gt;</code></dt><dd>Run <em>before</em> any config file. Use this to tweak <code>'runtimepath'</code> or disable a plugin before it loads.</dd>
+            <dt><code>-S &lt;session&gt;</code></dt><dd>Source a session file. Equivalent to <code>-c "source &lt;session&gt;"</code> but runs at the right moment.</dd>
+            <dt><code>-s &lt;scriptin&gt;</code></dt><dd>Read Normal-mode commands from a file — replay a recorded macro on file open.</dd>
+            <dt><code>-l &lt;script&gt; [args...]</code></dt><dd>Execute a Lua script with optional args — modern alternative to <code>-c "luafile ..."</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Chain multiple <code class="inline">-c</code> flags — they run in order:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim -c &quot;{{startup_cmd}}&quot; -c &quot;set cursorline&quot; {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Up to 10 <code>-c</code> / <code>+</code> commands are supported. Useful for
+            scripting a specific view (e.g. <code>-c "set number" -c "Gitsigns"
+            -c "normal! gg"</code>).</p>
+        </div>
+      </details>
+    </div>
+
+    <p>Use <code class="inline">--cmd</code> to run something <strong>before</strong> the vimrc /
+      init.lua — usually to alter <code class="inline">runtimepath</code> or set early options:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim --cmd &quot;set rtp+=~/dev/myplugin&quot; {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>The <code>--cmd</code> command runs <em>before</em> any user config. Anything that
+            needs to be in place when plugins load (extra runtimepath entries, disabling a built-in
+            plugin via <code>let g:loaded_FOO = 1</code>, etc.) belongs here.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--cmd &lt;cmd&gt;</code></dt><dd>Execute an ex command BEFORE loading any config. Repeatable.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>6. Pipe content into nvim</h2>
+    <p>A single dash <code class="inline">-</code> means "read stdin into a buffer" — perfect for
+      previewing piped output with full editor navigation:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git log --oneline | nvim -"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads piped text as the contents of an unnamed buffer. The buffer has no associated
+            file, so <code>:w</code> will ask for a name. Once loaded, stdin is detached and the
+            terminal returns to nvim's UI.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-</code></dt><dd>Special filename meaning "read stdin into a buffer". Only one <code>-</code> is allowed per invocation.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-R -</code></dt><dd>Read stdin AND mark the buffer read-only — see next snippet.</dd>
+            <dt><code>-c "set filetype=&lt;ft&gt;"</code></dt><dd>Force a filetype on the piped buffer (it has no extension to autodetect from).</dd>
+            <dt><code>--noplugin</code></dt><dd>Skip plugins for a fast read-only viewer.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Pipe in read-only — handy for browsing logs or grep output without risk of accidental
+      saves:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="rg --color=never {{pattern}} | nvim -R -"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Read-only buffer pre-populated with matches of
+            <code class="tmpl" data-template="{{pattern}}"></code>. Quit with <code>:q</code> — no
+            confirmation prompt because there's nothing to save.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-R</code></dt><dd>Read-only.</dd>
+            <dt><code>-</code></dt><dd>Read stdin.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>7. Open files from a list</h2>
+    <p>Load a quickfix file — e.g. compiler errors or a saved grep run — and start in the first
+      entry:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim -q {{quickfix_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads the file as a quickfix list (errorformat-parsed). Jump between entries with
+            <code>:cnext</code> / <code>:cprev</code>; view the list with <code>:copen</code>. The
+            file lines follow the format defined by <code>'errorformat'</code> — gcc / rg / eslint
+            output all work out of the box.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-q [errorfile]</code></dt><dd>Read a quickfix errorfile and jump to the first error. Without an arg, reads <code>errors.err</code> in the current directory.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-c "copen"</code></dt><dd>Open the quickfix window immediately after load.</dd>
+            <dt><code>-c "cdo &lt;cmd&gt;"</code></dt><dd>Run an ex command on every quickfix entry — search-and-replace across all matches.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Use shell expansion to open every file containing a pattern (ripgrep
+      <code class="inline">-l</code> emits one filename per line):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim $(rg -l &quot;{{pattern}}&quot;)"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Each filename ripgrep prints becomes an args-list entry. Combine with <code>-p</code>
+            for one tab per match, or <code>-O</code> for vertical splits.</p>
+          <div class="note">If filenames contain spaces, use <code>nvim $(rg -l -0
+            "{{pattern}}" | xargs -0 nvim)</code> instead — or use the quickfix flow with
+            <code>rg --vimgrep "{{pattern}}" &gt; {{quickfix_file}}</code> then <code>nvim -q
+            {{quickfix_file}}</code>.</div>
+        </div>
+      </details>
+    </div>
+
+    <h2>8. Run nvim non-interactively (scripted)</h2>
+    <p>Headless mode — no UI; useful for smoke tests, lints, or scripted edits in CI:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim --headless -c &quot;:help&quot; -c &quot;:q&quot;"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Starts nvim without a TUI, runs the listed ex commands, exits. Stdout receives any
+            <code>:echo</code> / <code>print()</code> output. Exit code reflects the result of the
+            last command. Great for CI checks like "does my plugin load cleanly?".</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--headless</code></dt><dd>Don't start a user interface. Stdout/stderr are still connected; useful for scripting.</dd>
+            <dt><code>-c &lt;cmd&gt;</code></dt><dd>Ex command to run.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--embed</code></dt><dd>Use stdin/stdout as a msgpack-rpc channel — for programmatic control by another process.</dd>
+            <dt><code>--listen &lt;address&gt;</code></dt><dd>Serve the RPC API at a socket/TCP address — pair with <code>--server</code> in another instance.</dd>
+            <dt><code>--api-info</code></dt><dd>Dump msgpack-encoded API metadata — useful for tooling that targets the Neovim API.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Silent (batch) ex-mode — apply a substitution and save without ever opening a UI:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim -es -c &quot;%s/foo/bar/g&quot; -c &quot;wq&quot; {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Silent ex mode runs without prompts or messages. Combined with <code>-c</code>, it's a
+            scriptable sed-with-vim-regex.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-es</code></dt><dd>Silent (script) mode. <code>-Es</code> is the improved-ex variant — same idea, fewer prompts.</dd>
+            <dt><code>-c &lt;cmd&gt;</code></dt><dd>Ex command. <code>wq</code> = write + quit.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-Es</code></dt><dd>Improved-ex silent mode. Slightly more modern than <code>-es</code>; preferred when scripting.</dd>
+            <dt><code>-n</code></dt><dd>Suppress swap file creation — leaves no <code>.swp</code> behind even if the script crashes.</dd>
+            <dt><code>-i NONE</code></dt><dd>Skip shada so scripted runs don't pollute history.</dd>
+            <dt><code>-u NONE</code></dt><dd>Skip user config — make sure the script behaves the same regardless of who runs it.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>9. Comparing files (diff mode)</h2>
+    <p>From the shell — open both files in side-by-side diff mode with synced scrolling and
+      coloured hunks:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim -d {{file_path}} {{second_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Opens both files in vertical splits, sets <code>'diff'</code>, <code>'scrollbind'</code>,
+            <code>'cursorbind'</code>, and folds matching regions. Same effect as
+            <code>vimdiff</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-d</code></dt><dd>Diff mode. Up to 8 file arguments are compared simultaneously.</dd>
+          </dl>
+          <h4>In-diff keybindings worth knowing</h4>
+          <dl class="flags">
+            <dt><code>]c</code></dt><dd>Jump to next diff hunk.</dd>
+            <dt><code>[c</code></dt><dd>Jump to previous diff hunk.</dd>
+            <dt><code>do</code></dt><dd><code>:diffget</code> — pull a change FROM the other window INTO the current one ("obtain").</dd>
+            <dt><code>dp</code></dt><dd><code>:diffput</code> — push a change FROM the current window TO the other ("put").</dd>
+            <dt><code>zo</code> / <code>zc</code></dt><dd>Open / close a fold (default fold-hidden unchanged sections).</dd>
+            <dt><code>:diffupdate</code></dt><dd>Recompute the diff after manual edits.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-O</code></dt><dd>Plain vertical split without diff — useful when you want side-by-side without the diff colouring.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>From inside nvim — turn the current file plus another into a diff pair:</p>
+    <div class="block">
+      <span class="lang">vim</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template=":vert diffsplit {{second_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Opens <code class="tmpl" data-template="{{second_file}}"></code> in a vertical split
+            and immediately enters diff mode against the current buffer. Drop <code>vert</code> for
+            a horizontal split.</p>
+          <h4>Related ex commands</h4>
+          <dl class="flags">
+            <dt><code>:diffsplit FILE</code></dt><dd>Open FILE in a horizontal split and diff against current buffer.</dd>
+            <dt><code>:diffthis</code></dt><dd>Mark the current window as a diff participant. Run in 2+ windows that already have content.</dd>
+            <dt><code>:diffoff</code></dt><dd>Turn diff off in the current window. <code>:diffoff!</code> turns off every diff window in the tab.</dd>
+            <dt><code>:diffupdate</code></dt><dd>Recompute diff after edits.</dd>
+            <dt><code>:windo diffthis</code></dt><dd>Mark every window in the current tab as a diff — quick way to turn a pre-existing layout into a diff.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>10. Diff a file against a git revision</h2>
+    <p>Side-by-side diff of the current buffer against
+      <code class="tmpl" data-template="{{git_rev}}"></code> — requires the
+      <strong>vim-fugitive</strong> plugin:</p>
+    <div class="block">
+      <span class="lang">vim</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template=":Gvdiffsplit {{git_rev}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Opens a vertical split containing the version of the current file at
+            <code class="tmpl" data-template="{{git_rev}}"></code> and enters diff mode. Bare
+            <code>:Gvdiffsplit</code> (no argument) compares against the index/HEAD.</p>
+          <div class="note"><strong>Requires the vim-fugitive plugin.</strong> Install via your
+            plugin manager, e.g. <code>Plug 'tpope/vim-fugitive'</code> /
+            <code>{'tpope/vim-fugitive'}</code> in lazy.nvim. Without fugitive, <code>:Gvdiffsplit</code>
+            errors with <code>E492: Not an editor command</code>; see the fallback snippet
+            below.</div>
+          <h4>Arguments used</h4>
+          <dl class="flags">
+            <dt><code>{rev}</code></dt><dd>Any git revision — commit SHA, branch, tag, <code>HEAD~N</code>, <code>main</code>, <code>origin/main</code>, etc.</dd>
+          </dl>
+          <h4>Related fugitive commands</h4>
+          <dl class="flags">
+            <dt><code>:Gvdiffsplit</code></dt><dd>No-arg form — vertical diff against the index.</dd>
+            <dt><code>:Gvdiffsplit!</code></dt><dd>During a merge conflict — diff against both parents in two splits.</dd>
+            <dt><code>:Gdiffsplit</code></dt><dd>Same idea, horizontal split.</dd>
+            <dt><code>:Gtabedit {rev}:%</code></dt><dd>Open the revision of the current file in a new tab — handy for read-only browsing.</dd>
+            <dt><code>:Git blame</code></dt><dd>Inline blame for the current buffer with quick-jump bindings.</dd>
+            <dt><code>:Gread {rev}:%</code></dt><dd>Replace the current buffer with the revision's contents (no diff) — useful for "give me the old version back".</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Diff against another branch instead of a commit ref:</p>
+    <div class="block">
+      <span class="lang">vim</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template=":Gvdiffsplit {{git_rev_compare}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Compares the current file against its version on
+            <code class="tmpl" data-template="{{git_rev_compare}}"></code>. Useful before merging
+            — see what your branch changed vs the base.</p>
+          <div class="note">Requires <strong>vim-fugitive</strong>.</div>
+        </div>
+      </details>
+    </div>
+
+    <p><strong>Plain vim alternative</strong> (no fugitive) — read <code class="inline">git
+      show</code> output into a scratch buffer and diff both windows manually:</p>
+    <div class="block">
+      <span class="lang">vim</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template=":vert new | r !git show {{git_rev}}:./{{file_path}} | 0d_ | setlocal buftype=nofile nobuflisted noswapfile | diffthis
+:wincmd p | diffthis"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Step by step: open a new vertical window, read <code>git show
+            REV:./FILE</code> into it, delete the empty first line that <code>:r</code> leaves
+            behind (<code>0d_</code>), mark the buffer as a scratch (no file, no swap, no
+            buflisted), then enable diff. Switch back to the original window
+            (<code>:wincmd p</code>) and enable diff there too. Works on a stock Neovim with no
+            plugins.</p>
+          <h4>Pieces used</h4>
+          <dl class="flags">
+            <dt><code>:vert new</code></dt><dd>Open a new empty vertical-split window.</dd>
+            <dt><code>:r !cmd</code></dt><dd>Read the output of a shell command into the buffer below the cursor.</dd>
+            <dt><code>0d_</code></dt><dd>Delete line 1 (the blank line <code>:r</code> leaves) into the black-hole register.</dd>
+            <dt><code>setlocal buftype=nofile nobuflisted noswapfile</code></dt><dd>Mark as a scratch buffer — <code>:q</code> won't prompt and there's no <code>.swp</code>.</dd>
+            <dt><code>:diffthis</code></dt><dd>Enable diff in the window.</dd>
+            <dt><code>:wincmd p</code></dt><dd>Switch focus to the previous window.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>11. Use neovim as git's diff/merge tool</h2>
+    <p>Configure once — point git's <code class="inline">difftool</code> and
+      <code class="inline">mergetool</code> at <code class="inline">nvimdiff</code>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git config --global diff.tool nvimdiff
+git config --global merge.tool nvimdiff
+git config --global difftool.prompt false"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Tells git to use the built-in <code>nvimdiff</code> wrapper (which boils down to
+            <code>nvim -d</code>) for both <code>difftool</code> and <code>mergetool</code>. The
+            <code>difftool.prompt=false</code> setting skips the per-file "view this diff?" prompt
+            so you can fly through a multi-file diff.</p>
+          <h4>Settings used</h4>
+          <dl class="flags">
+            <dt><code>diff.tool &lt;name&gt;</code></dt><dd>Default tool for <code>git difftool</code>. Built-ins include <code>nvimdiff</code>, <code>vimdiff</code>, <code>meld</code>, <code>kdiff3</code>.</dd>
+            <dt><code>merge.tool &lt;name&gt;</code></dt><dd>Default tool for <code>git mergetool</code>.</dd>
+            <dt><code>difftool.prompt</code></dt><dd>When <code>false</code>, skip the "view file?" prompt before each diff.</dd>
+          </dl>
+          <h4>Other settings you might want</h4>
+          <dl class="flags">
+            <dt><code>mergetool.keepBackup false</code></dt><dd>Don't leave <code>.orig</code> files around after a merge.</dd>
+            <dt><code>mergetool.nvimdiff.layout</code></dt><dd>Customise the 3-way / 4-way layout. See <code>git help mergetool</code> for the layout DSL.</dd>
+            <dt><code>--global</code> vs <code>--local</code></dt><dd>Set in <code>~/.gitconfig</code> vs <code>.git/config</code>. Drop <code>--global</code> for per-repo overrides.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Diff a single file between two revisions in nvim:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git difftool {{git_rev_compare}} HEAD -- {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Opens <code class="tmpl" data-template="{{file_path}}"></code>'s version at
+            <code class="tmpl" data-template="{{git_rev_compare}}"></code> on the left and at
+            <code>HEAD</code> on the right, both inside nvim's diff mode. Exit either window
+            (<code>:qa</code>) to move to the next file in the diff.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>&lt;rev1&gt; &lt;rev2&gt;</code></dt><dd>Compare two revisions. Either may be omitted: <code>git difftool HEAD~1</code> compares HEAD~1 vs working tree.</dd>
+            <dt><code>--</code></dt><dd>End-of-options separator; everything after is a pathspec.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-d, --dir-diff</code></dt><dd>Open the whole tree at once instead of file-by-file — opens two directory snapshots in nvim's filebrowser-style diff.</dd>
+            <dt><code>-t, --tool=&lt;tool&gt;</code></dt><dd>Override <code>diff.tool</code> for this invocation. <code>git difftool -t vimdiff</code> forces vimdiff.</dd>
+            <dt><code>--no-prompt</code> / <code>-y</code></dt><dd>Skip the per-file prompt for this invocation (equivalent to setting <code>difftool.prompt=false</code>).</dd>
+            <dt><code>--cached</code></dt><dd>Diff the index vs the given revision instead of the working tree.</dd>
+            <dt><code>-x &lt;cmd&gt;, --extcmd=&lt;cmd&gt;</code></dt><dd>Use an arbitrary command instead of a configured tool.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Walk every conflicted file with neovim during a merge:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git mergetool"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>For each unmerged file, opens nvim in a 4-way layout: LOCAL, BASE, REMOTE, MERGED.
+            Edit the MERGED window, save and quit (<code>:wqa</code>) to advance to the next file.</p>
+          <h4>Flags worth knowing</h4>
+          <dl class="flags">
+            <dt><code>--tool=&lt;tool&gt;</code></dt><dd>Override <code>merge.tool</code> for this invocation.</dd>
+            <dt><code>--no-prompt</code></dt><dd>Skip the "launch tool?" prompt before each file.</dd>
+            <dt><code>-O &lt;orderfile&gt;</code></dt><dd>Process files in a specific order.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>12. Open at the precise location of a git conflict</h2>
+    <p>Jump straight to the first conflict marker on open — escape the angle brackets so the shell
+      doesn't try to redirect:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim +/'^&lt;&lt;&lt;&lt;&lt;&lt;&lt; ' {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Opens <code class="tmpl" data-template="{{file_path}}"></code> and jumps to the first
+            line starting with <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; </code> — the start marker git
+            inserts for an unresolved conflict. Use <code>n</code> in normal mode to jump to the
+            next conflict.</p>
+          <div class="note">The single-quotes around <code>'^&lt;&lt;&lt;&lt;&lt;&lt;&lt; '</code>
+            stop the shell interpreting <code>&lt;</code> as input redirection. The
+            <code>^</code> anchors the search to start-of-line so it only matches actual conflict
+            markers, not text that happens to contain seven angle brackets.</div>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>+/PATTERN</code></dt><dd>Run a forward search after the file loads. See section 1.</dd>
+          </dl>
+          <h4>Related patterns</h4>
+          <dl class="flags">
+            <dt><code>+/'^======='</code></dt><dd>Jump to the divider between the two conflicting versions.</dd>
+            <dt><code>+/'^&gt;&gt;&gt;&gt;&gt;&gt;&gt; '</code></dt><dd>Jump to the end marker of a conflict.</dd>
+            <dt><code>+/'^|||||||'</code></dt><dd>Conflict base marker (only present with <code>merge.conflictStyle=diff3</code>).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Combine with <code class="inline">-O</code> to open every conflicted file side-by-side, each
+      starting at its first conflict — one shell line for the whole rebase:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="nvim -O +/'^&lt;&lt;&lt;&lt;&lt;&lt;&lt; ' $(git diff --name-only --diff-filter=U)"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p><code>git diff --name-only --diff-filter=U</code> prints just the unmerged
+            ("<strong>U</strong>nmerged") paths. Shell expansion turns them into nvim args.
+            <code>-O</code> opens each in its own vertical split; the <code>+/</code> search runs in
+            the first one and lands the cursor on the first conflict.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-O</code></dt><dd>Vertical splits, one per file.</dd>
+            <dt><code>+/PATTERN</code></dt><dd>Initial search.</dd>
+            <dt><code>git diff --diff-filter=U</code></dt><dd>Restrict output to files in the "Unmerged" state.</dd>
+            <dt><code>git diff --name-only</code></dt><dd>Print just filenames, no diff content.</dd>
+          </dl>
+          <div class="note">If many files are conflicted you'll want <code>-p</code> (one tab per
+            file) instead of <code>-O</code> — too many vertical splits become unreadable.</div>
+        </div>
+      </details>
+    </div>
+
+    <script>
+      (function () {
+        const DEFAULTS = {
+          file_path: "src/app.ts",
+          second_file: "src/utils.ts",
+          line_number: "42",
+          pattern: "TODO",
+          git_rev: "HEAD~1",
+          git_rev_compare: "main",
+          quickfix_file: "errors.qf",
+          startup_cmd: "set number"
+        };
+
+        const inputs = document.querySelectorAll("input[data-var]");
+        const templated = document.querySelectorAll("[data-template]");
+
+        function readVars() {
+          const vars = {};
+          inputs.forEach((i) => {
+            vars[i.dataset.var] = i.value;
+          });
+          return vars;
+        }
+
+        function decode(html) {
+          const t = document.createElement("textarea");
+          t.innerHTML = html;
+          return t.value;
+        }
+
+        function render() {
+          const vars = readVars();
+          templated.forEach((el) => {
+            const tpl = decode(el.getAttribute("data-template"));
+            const out = tpl.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+              Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "{{" + key + "}}"
+            );
+            el.textContent = out;
+          });
+        }
+
+        inputs.forEach((i) => i.addEventListener("input", render));
+
+        document.querySelectorAll(".copy").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const block = btn.closest(".block");
+            const code = block ? block.querySelector("pre > code") : null;
+            const text = code ? code.textContent : "";
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch (e) {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              try { document.execCommand("copy"); } catch (_) {}
+              document.body.removeChild(ta);
+            }
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("copied");
+            }, 1200);
+          });
+        });
+
+        document.getElementById("reset-btn").addEventListener("click", () => {
+          inputs.forEach((i) => {
+            i.value = DEFAULTS[i.dataset.var] ?? "";
+          });
+          render();
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>
