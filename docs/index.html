@@ -22,31 +22,34 @@
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
         line-height: 1.55;
-        max-width: 880px;
+        max-width: 980px;
         margin: 0 auto;
         padding: 48px 24px 80px;
       }
       h1 { font-size: 32px; margin: 0 0 8px; letter-spacing: -0.01em; }
-      h2 { font-size: 16px; margin: 36px 0 12px; color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.08em; }
+      h2 { font-size: 14px; margin: 32px 0 12px; color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.1em; }
       p { color: var(--text); }
-      .lead { color: var(--muted); font-size: 16px; margin: 0 0 28px; max-width: 640px; }
+      .lead { color: var(--muted); font-size: 16px; margin: 0 0 28px; max-width: 720px; }
       a { color: var(--accent); text-decoration: none; }
       a:hover { text-decoration: underline; }
 
       .card-grid {
         display: grid;
         grid-template-columns: 1fr;
-        gap: 14px;
+        gap: 12px;
       }
       @media (min-width: 720px) {
         .card-grid { grid-template-columns: 1fr 1fr; }
+      }
+      @media (min-width: 1080px) {
+        .card-grid { grid-template-columns: 1fr 1fr 1fr; }
       }
       .card {
         display: block;
         background: var(--panel);
         border: 1px solid var(--border);
         border-radius: 12px;
-        padding: 22px 22px 20px;
+        padding: 18px 18px 16px;
         transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
         text-decoration: none;
         color: var(--text);
@@ -64,25 +67,26 @@
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--muted);
-        margin-bottom: 8px;
+        margin-bottom: 6px;
       }
       .card h3 {
         margin: 0 0 6px;
-        font-size: 18px;
+        font-size: 16px;
         color: var(--accent);
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       }
       .card p {
         margin: 0;
         color: var(--text);
-        font-size: 13.5px;
+        font-size: 13px;
         line-height: 1.5;
       }
       .card .vars {
         margin-top: 10px;
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: 11.5px;
+        font-size: 11px;
         color: var(--muted);
+        line-height: 1.45;
       }
 
       .footer {
@@ -101,6 +105,17 @@
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-size: 12.5px;
       }
+      .ask {
+        display: inline-block;
+        margin: 4px 0;
+        padding: 8px 14px;
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: var(--accent-2);
+      }
     </style>
   </head>
   <body>
@@ -113,39 +128,106 @@
       sourced from the tool's real <code class="inline">--help</code> output.
     </p>
 
-    <h2>Examples</h2>
+    <h2>Databases</h2>
     <div class="card-grid">
       <a class="card" href="./postgres-setup.html">
-        <span class="tag">Databases</span>
+        <span class="tag">Postgres</span>
         <h3>postgres-setup</h3>
-        <p>Create a new Postgres database, schema, and table from scratch — via <code class="inline">psql</code>, <code class="inline">createdb</code>, or a one-shot heredoc.</p>
+        <p>Create a new Postgres database, schema, and table via <code class="inline">psql</code>, <code class="inline">createdb</code>, or a one-shot heredoc.</p>
         <div class="vars">host · port · db_name · schema · table · owner</div>
+      </a>
+    </div>
+
+    <h2>Containers &amp; Kubernetes</h2>
+    <div class="card-grid">
+      <a class="card" href="./docker-daily-driver.html">
+        <span class="tag">Docker</span>
+        <h3>docker-daily-driver</h3>
+        <p>Build, run, exec, log, inspect, prune — the commands you reach for every day.</p>
+        <div class="vars">image · tag · container_name · port_host · network · volume_host</div>
       </a>
 
       <a class="card" href="./kubectl-pod-debugging.html">
         <span class="tag">Kubernetes</span>
         <h3>kubectl-pod-debugging</h3>
-        <p>Inspect, log, exec into, copy files to/from, and port-forward pods — everything you need when something is on fire in a cluster.</p>
+        <p>Inspect, log, exec, copy files, and port-forward pods — everything you need when something is on fire in a cluster.</p>
         <div class="vars">context · namespace · pod · container · local_port · tail_lines</div>
       </a>
+    </div>
 
+    <h2>Cloud</h2>
+    <div class="card-grid">
+      <a class="card" href="./aws-s3.html">
+        <span class="tag">AWS</span>
+        <h3>aws-s3</h3>
+        <p>List, copy, sync, presign, and manage buckets and objects with the <code class="inline">aws s3</code> CLI.</p>
+        <div class="vars">profile · region · bucket · prefix · key · expires_in</div>
+      </a>
+    </div>
+
+    <h2>Version control</h2>
+    <div class="card-grid">
+      <a class="card" href="./git-rescue.html">
+        <span class="tag">Git</span>
+        <h3>git-rescue</h3>
+        <p>Undo, recover, cherry-pick, bisect, and force-push back — the commands you Google in a panic.</p>
+        <div class="vars">commit_sha · branch · base_branch · file_path · remote · stash_msg</div>
+      </a>
+    </div>
+
+    <h2>Networking, security &amp; certificates</h2>
+    <div class="card-grid">
+      <a class="card" href="./curl-recipes.html">
+        <span class="tag">HTTP</span>
+        <h3>curl-recipes</h3>
+        <p>Auth, multipart uploads, retries, timing, downloads, headers — practical curl invocations.</p>
+        <div class="vars">url · method · auth_token · output_file · upload_file · retries</div>
+      </a>
+
+      <a class="card" href="./openssl-certs.html">
+        <span class="tag">TLS</span>
+        <h3>openssl-certs</h3>
+        <p>Generate keys + CSRs, self-sign, inspect, convert formats, and probe TLS endpoints.</p>
+        <div class="vars">key_file · cert_file · csr_file · subject · days · key_size · host</div>
+      </a>
+    </div>
+
+    <h2>Media &amp; files</h2>
+    <div class="card-grid">
       <a class="card" href="./ffmpeg-transcoding.html">
-        <span class="tag">Media</span>
+        <span class="tag">FFmpeg</span>
         <h3>ffmpeg-transcoding</h3>
-        <p>Transcode, trim, extract audio, resize, concatenate, and turn videos into GIFs — with CRF, presets, and hardware-encode options.</p>
+        <p>Transcode, trim, extract audio, scale, concatenate, and turn videos into GIFs.</p>
         <div class="vars">input_file · output_file · video_codec · crf · preset · width</div>
       </a>
     </div>
 
-    <h2>How to make your own</h2>
+    <h2>Text processing &amp; shell tools</h2>
+    <div class="card-grid">
+      <a class="card" href="./jq-recipes.html">
+        <span class="tag">JSON</span>
+        <h3>jq-recipes</h3>
+        <p>Pick, filter, map, group_by, sort, recursive descent — the jq filters worth memorising.</p>
+        <div class="vars">input_file · field · array_field · select_key · select_value · arg_name</div>
+      </a>
+
+      <a class="card" href="./tmux-quickref.html">
+        <span class="tag">Tmux</span>
+        <h3>tmux-quickref</h3>
+        <p>Sessions, windows, panes, copy mode, scripting — both shell commands and prefix keybindings.</p>
+        <div class="vars">session_name · window_name · prefix_key · pane_command · target_pane</div>
+      </a>
+    </div>
+
+    <h2>Make your own</h2>
     <p>
       Install the skill (one-line clone — see the
       <a href="https://github.com/Rich107/interactive-cheatsheet#install">README</a>), then in
       Claude Code ask for something like:
     </p>
-    <p style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; color: var(--accent-2);">
-      "make me a cheatsheet for git rescue commands"
-    </p>
+    <p><span class="ask">"make me a cheatsheet for terraform state surgery"</span></p>
+    <p><span class="ask">"interactive cheatsheet for redis-cli day-to-day"</span></p>
+    <p><span class="ask">"cheatsheet for setting up a new mac from scratch"</span></p>
     <p>
       Claude will ask which specific CLIs to cover, capture real <code class="inline">--help</code>
       output for each, and write you both a markdown reference and an interactive HTML page like
@@ -154,7 +236,7 @@
 
     <div class="footer">
       <a href="https://github.com/Rich107/interactive-cheatsheet">github.com/Rich107/interactive-cheatsheet</a>
-      · MIT licensed
+      · MIT licensed · 10 examples · all generated by the skill itself
     </div>
   </body>
 </html>

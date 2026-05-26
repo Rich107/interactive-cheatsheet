@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>aws s3 — day-to-day</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-2: #1c2230;
+        --border: #262d3b;
+        --text: #e6e8ee;
+        --muted: #8b94a7;
+        --accent: #7aa2ff;
+        --accent-2: #9ae6b4;
+        --code-bg: #0b0d12;
+        --code-fg: #e6e8ee;
+        --btn: #2a3142;
+        --btn-hover: #38415a;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        line-height: 1.55;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 24px 80px;
+      }
+      h1 { font-size: 28px; margin: 0 0 6px; }
+      h2 { font-size: 20px; margin: 36px 0 10px; color: var(--accent); }
+      p, li { color: var(--text); }
+      .subtitle { color: var(--muted); margin: 0 0 24px; }
+      .vars {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 18px 8px;
+        position: sticky;
+        top: 12px;
+        z-index: 5;
+        box-shadow: var(--shadow);
+      }
+      .vars h2 { margin: 0 0 12px; font-size: 16px; color: var(--accent-2); }
+      .vars-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 14px;
+      }
+      .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+      .field label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .field input {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 120ms ease;
+      }
+      .field input:focus { border-color: var(--accent); }
+      .reset {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        margin-top: 6px;
+      }
+      .reset:hover { color: var(--text); border-color: var(--accent); }
+
+      .block {
+        position: relative;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin: 10px 0 18px;
+        overflow: hidden;
+      }
+      .block .lang {
+        position: absolute;
+        top: 8px;
+        left: 12px;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .block pre {
+        margin: 0;
+        padding: 30px 14px 14px;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: var(--code-fg);
+        white-space: pre;
+      }
+      .copy {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: var(--btn);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .copy:hover { background: var(--btn-hover); }
+      .copy.copied { background: #234e3c; color: #c6f6d5; border-color: #2f6b50; }
+
+      .explain {
+        border-top: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .explain > summary {
+        cursor: pointer;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        list-style: none;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: color 120ms ease;
+      }
+      .explain > summary::-webkit-details-marker { display: none; }
+      .explain > summary::before {
+        content: "▸";
+        font-size: 9px;
+        transition: transform 120ms ease;
+        display: inline-block;
+      }
+      .explain[open] > summary::before { transform: rotate(90deg); }
+      .explain > summary:hover { color: var(--text); }
+      .explain-body {
+        padding: 4px 14px 14px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text);
+      }
+      .explain-body h4 {
+        margin: 14px 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+      .explain-body p { margin: 4px 0 8px; }
+      .explain-body dl.flags {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(160px, max-content) 1fr;
+        gap: 4px 14px;
+      }
+      .explain-body dl.flags dt {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .explain-body dl.flags dt code {
+        background: transparent;
+        color: var(--accent);
+        padding: 0;
+        border: none;
+      }
+      .explain-body dl.flags dd { margin: 0; color: var(--text); }
+      .explain-body code.tmpl {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent-2);
+      }
+
+      hr.sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+      code.inline {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>aws s3 — day-to-day</h1>
+    <p class="subtitle">
+      Change the variables below — every snippet on the page updates live. Click <strong>Explain</strong>
+      under any command to see what each flag does, plus other flags worth knowing. Help text sourced
+      from <code class="inline">aws-cli/2.34.0</code>.
+    </p>
+
+    <section class="vars" aria-label="Variables">
+      <h2>Variables</h2>
+      <div class="vars-grid">
+        <div class="field">
+          <label for="profile">profile</label>
+          <input id="profile" data-var="profile" value="default" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="region">region</label>
+          <input id="region" data-var="region" value="us-east-1" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="bucket">bucket</label>
+          <input id="bucket" data-var="bucket" value="my-bucket" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="prefix">prefix</label>
+          <input id="prefix" data-var="prefix" value="uploads/" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="key">key</label>
+          <input id="key" data-var="key" value="report.pdf" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="local_path">local path</label>
+          <input id="local_path" data-var="local_path" value="./report.pdf" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="expires_in">expires in (s)</label>
+          <input id="expires_in" data-var="expires_in" value="3600" autocomplete="off" />
+        </div>
+      </div>
+      <button class="reset" id="reset-btn" type="button">Reset to defaults</button>
+    </section>
+
+    <h2>1. List buckets and objects</h2>
+    <p>Show every bucket the credentials can see:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 ls --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>With no S3 URI, <code>aws s3 ls</code> returns the list of buckets owned by the caller, using
+            profile <code class="tmpl" data-template="{{profile}}"></code> against region
+            <code class="tmpl" data-template="{{region}}"></code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--profile NAME</code></dt><dd>Named profile from <code>~/.aws/credentials</code> / <code>~/.aws/config</code>.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region to send the request to.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--bucket-name-prefix STR</code></dt><dd>Limit the response to bucket names that start with this prefix.</dd>
+            <dt><code>--bucket-region REGION</code></dt><dd>Limit the response to buckets located in a specific region.</dd>
+            <dt><code>--output json|text|table|yaml</code></dt><dd>Pick a different output format.</dd>
+            <dt><code>--no-sign-request</code></dt><dd>Don't sign — for fully public buckets only.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>List the top-level contents of a single bucket under a prefix:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 ls s3://{{bucket}}/{{prefix}} --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Lists the immediate keys and common prefixes under
+            <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}"></code>. Sub-prefixes appear with
+            a <code>PRE</code> marker and no size.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile to use.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region for the request.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--recursive</code></dt><dd>Walk the full key tree under the prefix (no <code>PRE</code> rollups).</dd>
+            <dt><code>--human-readable</code></dt><dd>Display sizes as KiB / MiB / GiB instead of bytes.</dd>
+            <dt><code>--summarize</code></dt><dd>Append totals (object count + total size) at the end.</dd>
+            <dt><code>--page-size N</code></dt><dd>Items per ListObjects page (default 1000). Lower if the API times out.</dd>
+            <dt><code>--request-payer requester</code></dt><dd>Acknowledge requester-pays charges when listing third-party buckets.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Walk an entire prefix recursively, with friendly sizes and a totals line:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 ls s3://{{bucket}}/{{prefix}} --recursive --human-readable --summarize --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Recursively lists every object under
+            <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}"></code>, formats sizes for
+            humans, and ends with a <code>Total Objects</code> / <code>Total Size</code> rollup. The
+            quickest way to find out how much disk space a prefix is consuming.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--recursive</code></dt><dd>Recurse into all sub-prefixes.</dd>
+            <dt><code>--human-readable</code></dt><dd>Print sizes in KB / MB / GB.</dd>
+            <dt><code>--summarize</code></dt><dd>Show summary information (number of objects, total size).</dd>
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--page-size N</code></dt><dd>Tune the per-page list size; helps on huge buckets.</dd>
+            <dt><code>--output json --no-paginate</code></dt><dd>Machine-readable output for one page (the high-level <code>ls</code> ignores <code>--output</code>; use <code>aws s3api list-objects-v2</code> if you need JSON).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>2. Make and delete buckets</h2>
+    <p>Create a bucket in a specific region. The region is locked at creation time — pick carefully:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 mb s3://{{bucket}} --region {{region}} --profile {{profile}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Creates bucket <code class="tmpl" data-template="{{bucket}}"></code> in region
+            <code class="tmpl" data-template="{{region}}"></code>. Bucket names are globally unique
+            across all AWS accounts, so common words rarely succeed.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--region REGION</code></dt><dd>Region the bucket will live in. Required when not running in <code>us-east-1</code>.</dd>
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile to use.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--endpoint-url URL</code></dt><dd>Point at a custom endpoint (LocalStack, MinIO, AWS PrivateLink).</dd>
+            <dt><code>--no-verify-ssl</code></dt><dd>Skip SSL cert verification — local-dev only.</dd>
+          </dl>
+          <p>For object-lock, bucket key, or non-default ACL settings you'll need <code>aws s3api create-bucket</code>, which exposes the full create-bucket request structure.</p>
+        </div>
+      </details>
+    </div>
+
+    <p>Delete a bucket. <code class="inline">--force</code> empties non-versioned objects first; versioned buckets need <code class="inline">aws s3api delete-object --version-id</code> to clear out versions before they can be removed:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 rb s3://{{bucket}} --force --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Empties non-versioned objects in <code class="tmpl" data-template="{{bucket}}"></code> and
+            then deletes the bucket itself. Permanent — there is no S3-side recycle bin.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--force</code></dt><dd>Delete all objects in the bucket including the bucket itself. Note that versioned objects will not be deleted in this process.</dd>
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile to use.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region for the request.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--endpoint-url URL</code></dt><dd>Override the S3 endpoint.</dd>
+            <dt><code>--no-paginate</code></dt><dd>Issue a single page request — usually irrelevant for <code>rb</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>3. Copy single files</h2>
+    <p>Upload a local file to a specific key:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 cp {{local_path}} s3://{{bucket}}/{{prefix}}{{key}} --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Uploads <code class="tmpl" data-template="{{local_path}}"></code> to
+            <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}{{key}}"></code>. The CLI picks a
+            multipart upload automatically once the file exceeds the configured threshold (8 MB by
+            default).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--dryrun</code></dt><dd>Show what would be transferred without actually doing it.</dd>
+            <dt><code>--storage-class STD|STANDARD_IA|GLACIER|...</code></dt><dd>Pick a non-default storage class at upload time.</dd>
+            <dt><code>--sse AES256|aws:kms</code></dt><dd>Request server-side encryption (with KMS pair with <code>--sse-kms-key-id</code>).</dd>
+            <dt><code>--content-type TYPE</code></dt><dd>Force a MIME type instead of letting the CLI guess.</dd>
+            <dt><code>--metadata key1=val1,key2=val2</code></dt><dd>Attach custom <code>x-amz-meta-*</code> headers.</dd>
+            <dt><code>--acl public-read</code></dt><dd>Apply a canned ACL — only works if Object Ownership allows ACLs.</dd>
+            <dt><code>--only-show-errors</code></dt><dd>Suppress per-file progress — useful in CI logs.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Download an object to the local filesystem:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 cp s3://{{bucket}}/{{prefix}}{{key}} {{local_path}} --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Downloads <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}{{key}}"></code> to
+            <code class="tmpl" data-template="{{local_path}}"></code>. The CLI will create intermediate
+            directories on the local side.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--no-progress</code></dt><dd>Suppress the running progress line.</dd>
+            <dt><code>--request-payer requester</code></dt><dd>Required when downloading from a requester-pays bucket.</dd>
+            <dt><code>--sse-c AES256 --sse-c-key FILE</code></dt><dd>Decrypt SSE-C objects by providing the customer-managed key.</dd>
+            <dt><code>--checksum-mode ENABLED</code></dt><dd>Verify the additional checksum stored with the object.</dd>
+            <dt><code>--force-glacier-transfer</code></dt><dd>Attempt the transfer even on Glacier-tier objects (use after restore).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Recursively copy a tree, with include/exclude filters applied left-to-right:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 cp {{local_path}} s3://{{bucket}}/{{prefix}} --recursive --exclude &quot;*&quot; --include &quot;*.pdf&quot; --exclude &quot;*draft*&quot; --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Uploads everything under <code class="tmpl" data-template="{{local_path}}"></code> into
+            <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}"></code>, but only files matching
+            <code>*.pdf</code> — and even then, anything with <code>draft</code> in the name is dropped.
+            Filters are evaluated in the order they appear; later flags override earlier ones.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--recursive</code></dt><dd>Operate on every file under the source path.</dd>
+            <dt><code>--exclude PATTERN</code></dt><dd>Exclude matching files. Repeatable.</dd>
+            <dt><code>--include PATTERN</code></dt><dd>Re-include files previously excluded. Repeatable.</dd>
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--follow-symlinks / --no-follow-symlinks</code></dt><dd>Whether to upload the targets of symbolic links (default: follow).</dd>
+            <dt><code>--storage-class STANDARD_IA</code></dt><dd>Apply a storage class to every uploaded object.</dd>
+            <dt><code>--page-size N</code></dt><dd>Tune list-page size during the recursive crawl.</dd>
+            <dt><code>--no-guess-mime-type</code></dt><dd>Stop the CLI from setting a Content-Type from the file extension.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>4. Sync directories</h2>
+    <p>Mirror a local directory into S3. <code class="inline">--delete</code> removes destination
+      objects that no longer exist on the source — leave it off for additive uploads:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 sync {{local_path}} s3://{{bucket}}/{{prefix}} --delete --exclude &quot;*.tmp&quot; --include &quot;*&quot; --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Copies new and updated files from
+            <code class="tmpl" data-template="{{local_path}}"></code> into
+            <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}"></code>, removes destination
+            keys that no longer exist locally, and skips <code>.tmp</code> files. Sync compares size +
+            mtime by default to decide whether to copy.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--delete</code></dt><dd>Delete files from the destination that don't exist in the source.</dd>
+            <dt><code>--exclude PATTERN</code></dt><dd>Skip files matching the pattern.</dd>
+            <dt><code>--include PATTERN</code></dt><dd>Re-include previously excluded files.</dd>
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--dryrun</code></dt><dd>Preview the operations without performing them — always run this first when <code>--delete</code> is involved.</dd>
+            <dt><code>--size-only</code></dt><dd>Compare only file size, ignoring mtime.</dd>
+            <dt><code>--exact-timestamps</code></dt><dd>Require both size and exact mtime match — useful when restoring backups.</dd>
+            <dt><code>--storage-class CLASS</code></dt><dd>Apply a storage class to every uploaded object.</dd>
+            <dt><code>--no-progress</code></dt><dd>Quiet the per-file progress lines.</dd>
+            <dt><code>--only-show-errors</code></dt><dd>CI-friendly output: only failures appear.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Pull a prefix down into a local working copy:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 sync s3://{{bucket}}/{{prefix}} {{local_path}} --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reverse-direction sync: every object under
+            <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}"></code> is downloaded to
+            <code class="tmpl" data-template="{{local_path}}"></code> and a re-run only fetches what has
+            changed since the last sync.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--delete</code></dt><dd>Delete local files that no longer exist in S3.</dd>
+            <dt><code>--exact-timestamps</code></dt><dd>Catch the case where S3 has the same size but a newer mtime.</dd>
+            <dt><code>--no-sign-request</code></dt><dd>Anonymous request — for fully public buckets.</dd>
+            <dt><code>--request-payer requester</code></dt><dd>Acknowledge requester-pays charges.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>5. Move and delete</h2>
+    <p>Move (copy + delete source) — rename keys or migrate between buckets:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 mv s3://{{bucket}}/{{prefix}}{{key}} s3://{{bucket}}/archive/{{key}} --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Server-side copies
+            <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}{{key}}"></code> to
+            <code class="tmpl" data-template="s3://{{bucket}}/archive/{{key}}"></code> and then deletes
+            the source. Use <code>--validate-same-s3-paths</code> when access-point ARNs are involved —
+            the CLI warns that ARN aliases can resolve to the same bucket and silently delete the
+            source.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--recursive</code></dt><dd>Move every object under a prefix.</dd>
+            <dt><code>--dryrun</code></dt><dd>Print the planned operations without executing — essential before bulk moves.</dd>
+            <dt><code>--validate-same-s3-paths</code></dt><dd>Verify source and destination resolve to different underlying buckets when using access-point ARNs.</dd>
+            <dt><code>--metadata-directive REPLACE</code></dt><dd>Drop the source object's metadata and apply new <code>--metadata</code> values.</dd>
+            <dt><code>--storage-class CLASS</code></dt><dd>Change storage class at move time.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Delete a single object:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 rm s3://{{bucket}}/{{prefix}}{{key}} --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Deletes <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}{{key}}"></code>. On a
+            versioned bucket this creates a delete marker rather than removing the data — pass a
+            <code>--version-id</code> via <code>aws s3api delete-object</code> to remove specific versions.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--dryrun</code></dt><dd>Show what would be deleted without doing it.</dd>
+            <dt><code>--quiet</code></dt><dd>Suppress per-object output (still surfaces errors).</dd>
+            <dt><code>--request-payer requester</code></dt><dd>Acknowledge requester-pays charges.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Delete every object under a prefix. Always rehearse with <code class="inline">--dryrun</code> first — there is no undo:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 rm s3://{{bucket}}/{{prefix}} --recursive --dryrun --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Prints the would-be deletes under
+            <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}"></code>. Remove
+            <code>--dryrun</code> once you're happy with the list.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--recursive</code></dt><dd>Apply the delete to every key under the prefix.</dd>
+            <dt><code>--dryrun</code></dt><dd>Show planned deletions without executing them.</dd>
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--exclude PATTERN</code></dt><dd>Protect specific files from the recursive delete.</dd>
+            <dt><code>--include PATTERN</code></dt><dd>Combine with a broad exclude to narrow the target set.</dd>
+            <dt><code>--only-show-errors</code></dt><dd>CI-friendly output mode.</dd>
+            <dt><code>--page-size N</code></dt><dd>Smaller list pages can avoid request timeouts on huge prefixes.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>6. Presigned URLs</h2>
+    <p>Generate a time-limited GET URL anyone can use without AWS credentials. Default expiry is 3600s
+      (1 hour); maximum is 604800s (7 days):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 presign s3://{{bucket}}/{{prefix}}{{key}} --expires-in {{expires_in}} --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Prints a presigned GET URL for
+            <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}{{key}}"></code> that remains
+            valid for <code class="tmpl" data-template="{{expires_in}}"></code> seconds. All presigned
+            URLs use SigV4, so <code>--region</code> must be set explicitly.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--expires-in SECONDS</code></dt><dd>Number of seconds until the URL expires. Default 3600, max 604800.</dd>
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile to sign with.</dd>
+            <dt><code>--region REGION</code></dt><dd>Region the URL targets (required for SigV4).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--endpoint-url URL</code></dt><dd>Point the presigned URL at a non-AWS endpoint (e.g. MinIO).</dd>
+            <dt><code>--no-verify-ssl</code></dt><dd>Skip SSL verification — local dev only.</dd>
+          </dl>
+          <p>The high-level <code>presign</code> subcommand only emits GET URLs. For PUT, POST-form, or multipart presigning, use the SDK (<code>boto3</code> <code>generate_presigned_url</code> / <code>generate_presigned_post</code>) — the CLI doesn't expose them directly.</p>
+        </div>
+      </details>
+    </div>
+
+    <h2>7. Object metadata and ACL (s3api)</h2>
+    <p>Inspect an object's metadata without downloading the body — size, content-type, ETag,
+      server-side-encryption, and any custom <code class="inline">x-amz-meta-*</code> headers:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3api head-object --bucket {{bucket}} --key {{prefix}}{{key}} --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Issues a HEAD request against
+            <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}{{key}}"></code> and prints its
+            metadata as JSON. A 404 means the object doesn't exist (or the caller can't list the
+            bucket); a 403 means the caller lacks <code>s3:GetObject</code> permission.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--bucket NAME</code></dt><dd>The bucket name containing the object.</dd>
+            <dt><code>--key STRING</code></dt><dd>The object key.</dd>
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--version-id ID</code></dt><dd>Inspect a specific version on a versioned bucket.</dd>
+            <dt><code>--part-number N</code></dt><dd>Get metadata for a specific part of a multipart object.</dd>
+            <dt><code>--checksum-mode ENABLED</code></dt><dd>Include the stored additional checksum in the response.</dd>
+            <dt><code>--if-match ETAG</code></dt><dd>Return 412 unless the object's ETag matches.</dd>
+            <dt><code>--if-modified-since RFC1123</code></dt><dd>Return 304 if the object hasn't changed since that time.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Upload an object with custom metadata + an explicit content-type. Each
+      <code class="inline">--metadata</code> key becomes an
+      <code class="inline">x-amz-meta-&lt;key&gt;</code> request header:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3api put-object \
+  --bucket {{bucket}} \
+  --key {{prefix}}{{key}} \
+  --body {{local_path}} \
+  --content-type application/pdf \
+  --metadata source=cheatsheet,owner=team-platform \
+  --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Uploads <code class="tmpl" data-template="{{local_path}}"></code> to
+            <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}{{key}}"></code> in a single PUT
+            request (no multipart). Unlike <code>aws s3 cp</code>, this lets you set the full
+            put-object request body — useful for things like If-None-Match, Object Lock, and explicit
+            checksum algorithms.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--bucket NAME</code></dt><dd>Destination bucket.</dd>
+            <dt><code>--key STRING</code></dt><dd>Destination key.</dd>
+            <dt><code>--body PATH</code></dt><dd>Local file to upload as the object body.</dd>
+            <dt><code>--content-type TYPE</code></dt><dd>HTTP <code>Content-Type</code> header on the object.</dd>
+            <dt><code>--metadata key=val,...</code></dt><dd>Custom user metadata stored as <code>x-amz-meta-*</code> headers.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--server-side-encryption AES256|aws:kms</code></dt><dd>Per-object encryption override.</dd>
+            <dt><code>--ssekms-key-id ARN</code></dt><dd>KMS key to use (pair with <code>--server-side-encryption aws:kms</code>).</dd>
+            <dt><code>--storage-class CLASS</code></dt><dd>Override the bucket default storage class.</dd>
+            <dt><code>--if-none-match "*"</code></dt><dd>Fail with 412 if the key already exists — atomic create-if-absent.</dd>
+            <dt><code>--object-lock-mode GOVERNANCE|COMPLIANCE</code></dt><dd>Apply Object Lock at upload time.</dd>
+            <dt><code>--checksum-algorithm SHA256|SHA1|CRC32|CRC32C</code></dt><dd>Have S3 store and verify an additional checksum.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Apply a canned ACL to an existing object. Only works on buckets whose Object Ownership is
+      <code class="inline">BucketOwnerPreferred</code> or <code class="inline">ObjectWriter</code>;
+      ACLs are disabled when Object Ownership is set to <code class="inline">BucketOwnerEnforced</code> (the modern default):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3api put-object-acl --bucket {{bucket}} --key {{prefix}}{{key}} --acl public-read --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Replaces the object's ACL with the canned <code>public-read</code> policy. Public access
+            block settings (account- or bucket-level) will override the ACL if they're enabled.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--bucket NAME</code></dt><dd>Bucket containing the object.</dd>
+            <dt><code>--key STRING</code></dt><dd>Object key.</dd>
+            <dt><code>--acl CANNED</code></dt><dd>Canned ACL: <code>private</code>, <code>public-read</code>, <code>public-read-write</code>, <code>authenticated-read</code>, <code>aws-exec-read</code>, <code>bucket-owner-read</code>, <code>bucket-owner-full-control</code>, <code>log-delivery-write</code>.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--grant-read STR</code></dt><dd>Grant read permission to specific URIs / canonical IDs.</dd>
+            <dt><code>--grant-full-control STR</code></dt><dd>Grant FULL_CONTROL to specific grantees.</dd>
+            <dt><code>--access-control-policy JSON</code></dt><dd>Replace the entire ACL with a structured policy.</dd>
+            <dt><code>--version-id ID</code></dt><dd>Target a specific object version.</dd>
+            <dt><code>--expected-bucket-owner ID</code></dt><dd>Fail with 403 if the account ID owning the bucket changes — protects against bucket-takeover scenarios.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>8. Bucket policy and default encryption</h2>
+    <p>Print the bucket policy as JSON. <code class="inline">--output text --query Policy</code> strips the AWS-CLI envelope so the result is straight JSON ready to pipe into <code class="inline">jq</code>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3api get-bucket-policy --bucket {{bucket}} --profile {{profile}} --region {{region}} --output text --query Policy"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads the policy attached to <code class="tmpl" data-template="{{bucket}}"></code>. A
+            <code>NoSuchBucketPolicy</code> error simply means none is attached.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--bucket NAME</code></dt><dd>Bucket to query.</dd>
+            <dt><code>--output text</code></dt><dd>Strip JSON envelope — emit the value as plain text.</dd>
+            <dt><code>--query EXPR</code></dt><dd>JMESPath expression. <code>Policy</code> extracts the inner JSON document.</dd>
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--expected-bucket-owner ID</code></dt><dd>Verify caller is talking to the bucket they expect.</dd>
+            <dt><code>aws s3api get-bucket-policy-status</code></dt><dd>Sibling command that returns whether the policy makes the bucket public.</dd>
+            <dt><code>aws s3api put-bucket-policy --policy file://policy.json</code></dt><dd>Push a new policy from a local file.</dd>
+            <dt><code>aws s3api delete-bucket-policy</code></dt><dd>Remove the bucket policy entirely.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Set default server-side encryption to SSE-S3 (AES256). For SSE-KMS, swap the rule for
+      <code class="inline">{"SSEAlgorithm":"aws:kms","KMSMasterKeyID":"&lt;arn&gt;"}</code>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3api put-bucket-encryption \
+  --bucket {{bucket}} \
+  --server-side-encryption-configuration '{&quot;Rules&quot;:[{&quot;ApplyServerSideEncryptionByDefault&quot;:{&quot;SSEAlgorithm&quot;:&quot;AES256&quot;}}]}' \
+  --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Installs a default-encryption rule on
+            <code class="tmpl" data-template="{{bucket}}"></code> so every new object is encrypted with
+            SSE-S3 (AES256). All buckets already get SSE-S3 by default since Jan 2023 — this command is
+            mainly used to upgrade to SSE-KMS, enable Bucket Keys, or pin the algorithm explicitly for
+            compliance audits.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--bucket NAME</code></dt><dd>Target bucket.</dd>
+            <dt><code>--server-side-encryption-configuration JSON</code></dt><dd>The full ruleset. Single-rule shorthand shown above; see the API reference for the multi-rule form.</dd>
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--checksum-algorithm SHA256</code></dt><dd>Have the CLI compute and send a stronger content checksum on the request itself.</dd>
+            <dt><code>--expected-bucket-owner ID</code></dt><dd>Guard against bucket ownership changes.</dd>
+            <dt><code>aws s3api get-bucket-encryption</code></dt><dd>Read back the current encryption configuration.</dd>
+            <dt><code>aws s3api delete-bucket-encryption</code></dt><dd>Reset to the account-default (SSE-S3).</dd>
+            <dt><code>BucketKeyEnabled=true</code> in JSON</dt><dd>Inside the rule, enables S3 Bucket Keys — major cost saver for SSE-KMS.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>9. Versioning and lifecycle</h2>
+    <p>Enable versioning — every PUT thereafter writes a new version instead of overwriting. Allow
+      ~15 minutes for the setting to fully propagate before relying on it:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3api put-bucket-versioning --bucket {{bucket}} --versioning-configuration Status=Enabled --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Turns on versioning for <code class="tmpl" data-template="{{bucket}}"></code>. Versioning
+            can be set to <code>Enabled</code> or <code>Suspended</code> — there's no way to fully turn
+            it off once enabled, only to suspend it. Pair with a noncurrent-version lifecycle rule to
+            avoid unbounded storage growth.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--bucket NAME</code></dt><dd>Target bucket.</dd>
+            <dt><code>--versioning-configuration Status=Enabled</code></dt><dd>Shorthand for <code>{"Status":"Enabled"}</code>. <code>Suspended</code> turns it off going forward.</dd>
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--mfa "SERIAL CODE"</code></dt><dd>Enable MFA Delete (root credentials only). Required to permanently delete versions afterwards.</dd>
+            <dt><code>--versioning-configuration Status=Enabled,MFADelete=Enabled</code></dt><dd>Turn on MFA Delete at the same time as versioning.</dd>
+            <dt><code>--expected-bucket-owner ID</code></dt><dd>Fail unless the caller is talking to the expected account's bucket.</dd>
+            <dt><code>aws s3api get-bucket-versioning</code></dt><dd>Read the current status (<code>Enabled</code>, <code>Suspended</code>, or empty if never set).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Read the current lifecycle configuration — transition rules to IA/Glacier, expiration rules,
+      abort-incomplete-multipart-upload rules, etc.:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3api get-bucket-lifecycle-configuration --bucket {{bucket}} --profile {{profile}} --region {{region}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Returns the lifecycle rules attached to
+            <code class="tmpl" data-template="{{bucket}}"></code>. A
+            <code>NoSuchLifecycleConfiguration</code> error means no rules are configured.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--bucket NAME</code></dt><dd>Bucket to inspect.</dd>
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--expected-bucket-owner ID</code></dt><dd>Validate the bucket-owner account ID.</dd>
+            <dt><code>aws s3api put-bucket-lifecycle-configuration --lifecycle-configuration file://rules.json</code></dt><dd>Push a new ruleset from a local JSON file.</dd>
+            <dt><code>aws s3api delete-bucket-lifecycle</code></dt><dd>Remove every lifecycle rule on the bucket.</dd>
+          </dl>
+          <p>A minimal rule that aborts incomplete multipart uploads after 7 days is one of the highest-value lifecycle additions to any bucket — it stops orphaned multipart parts silently accumulating.</p>
+        </div>
+      </details>
+    </div>
+
+    <h2>10. Pipe to stdin/stdout</h2>
+    <p>Using <code class="inline">-</code> as the source or destination tells the CLI to read from
+      stdin or write to stdout instead of a local path. Handy for piping through other tools or for
+      objects you never want on disk:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 cp - s3://{{bucket}}/{{prefix}}{{key}} --profile {{profile}} --region {{region}} &lt; {{local_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads object body from stdin (here, redirected from
+            <code class="tmpl" data-template="{{local_path}}"></code>) and uploads it to
+            <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}{{key}}"></code>. Stdin uploads
+            don't know the total size up front, which can prevent the CLI from picking optimal multipart
+            chunk sizes — pass <code>--expected-size</code> for large streams.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-</code> (source)</dt><dd>Read the object body from standard input.</dd>
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--expected-size BYTES</code></dt><dd>Hint at the total size when uploading from stdin so the CLI can pick the right multipart chunk size.</dd>
+            <dt><code>--content-type TYPE</code></dt><dd>Set a MIME type explicitly — guessing doesn't work for stdin streams.</dd>
+            <dt><code>--sse AES256|aws:kms</code></dt><dd>Request server-side encryption.</dd>
+            <dt><code>--storage-class CLASS</code></dt><dd>Pick a non-default storage class.</dd>
+            <dt><code>--quiet</code></dt><dd>Suppress per-operation status lines.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Stream an object's body to stdout (and on to disk, jq, gzip, etc.):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="aws s3 cp s3://{{bucket}}/{{prefix}}{{key}} - --profile {{profile}} --region {{region}} &gt; {{local_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Downloads
+            <code class="tmpl" data-template="s3://{{bucket}}/{{prefix}}{{key}}"></code> to stdout and
+            redirects it to <code class="tmpl" data-template="{{local_path}}"></code>. Swap the
+            redirection for a pipe to feed the body directly into <code>gzip -dc</code>,
+            <code>jq</code>, <code>tar -xf -</code>, or anything else.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-</code> (destination)</dt><dd>Write the object body to standard output.</dd>
+            <dt><code>--profile NAME</code></dt><dd>Credentials profile.</dd>
+            <dt><code>--region REGION</code></dt><dd>AWS region.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--only-show-errors</code></dt><dd>Stop the CLI's progress chatter polluting your pipeline.</dd>
+            <dt><code>--no-sign-request</code></dt><dd>Fetch anonymously from a public bucket.</dd>
+            <dt><code>--sse-c AES256 --sse-c-key fileb://key.bin</code></dt><dd>Decrypt SSE-C objects on the fly.</dd>
+            <dt><code>--request-payer requester</code></dt><dd>Acknowledge requester-pays transfer charges.</dd>
+            <dt><code>--checksum-mode ENABLED</code></dt><dd>Verify the additional checksum stored with the object.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <script>
+      (function () {
+        const DEFAULTS = {
+          profile: "default",
+          region: "us-east-1",
+          bucket: "my-bucket",
+          prefix: "uploads/",
+          key: "report.pdf",
+          local_path: "./report.pdf",
+          expires_in: "3600"
+        };
+
+        const inputs = document.querySelectorAll("input[data-var]");
+        const templated = document.querySelectorAll("[data-template]");
+
+        function readVars() {
+          const vars = {};
+          inputs.forEach((i) => {
+            vars[i.dataset.var] = i.value;
+          });
+          return vars;
+        }
+
+        function decode(html) {
+          const t = document.createElement("textarea");
+          t.innerHTML = html;
+          return t.value;
+        }
+
+        function render() {
+          const vars = readVars();
+          templated.forEach((el) => {
+            const tpl = decode(el.getAttribute("data-template"));
+            const out = tpl.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+              Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "{{" + key + "}}"
+            );
+            el.textContent = out;
+          });
+        }
+
+        inputs.forEach((i) => i.addEventListener("input", render));
+
+        document.querySelectorAll(".copy").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const block = btn.closest(".block");
+            const code = block ? block.querySelector("pre > code") : null;
+            const text = code ? code.textContent : "";
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch (e) {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              try { document.execCommand("copy"); } catch (_) {}
+              document.body.removeChild(ta);
+            }
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("copied");
+            }, 1200);
+          });
+        });
+
+        document.getElementById("reset-btn").addEventListener("click", () => {
+          inputs.forEach((i) => {
+            i.value = DEFAULTS[i.dataset.var] ?? "";
+          });
+          render();
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

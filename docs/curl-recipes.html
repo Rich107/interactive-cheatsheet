@@ -1,0 +1,987 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>curl recipes</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-2: #1c2230;
+        --border: #262d3b;
+        --text: #e6e8ee;
+        --muted: #8b94a7;
+        --accent: #7aa2ff;
+        --accent-2: #9ae6b4;
+        --code-bg: #0b0d12;
+        --code-fg: #e6e8ee;
+        --btn: #2a3142;
+        --btn-hover: #38415a;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        line-height: 1.55;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 24px 80px;
+      }
+      h1 { font-size: 28px; margin: 0 0 6px; }
+      h2 { font-size: 20px; margin: 36px 0 10px; color: var(--accent); }
+      p, li { color: var(--text); }
+      .subtitle { color: var(--muted); margin: 0 0 24px; }
+      .vars {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 18px 8px;
+        position: sticky;
+        top: 12px;
+        z-index: 5;
+        box-shadow: var(--shadow);
+      }
+      .vars h2 { margin: 0 0 12px; font-size: 16px; color: var(--accent-2); }
+      .vars-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 14px;
+      }
+      .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+      .field label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .field input {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 120ms ease;
+      }
+      .field input:focus { border-color: var(--accent); }
+      .reset {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        margin-top: 6px;
+      }
+      .reset:hover { color: var(--text); border-color: var(--accent); }
+
+      .block {
+        position: relative;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin: 10px 0 18px;
+        overflow: hidden;
+      }
+      .block .lang {
+        position: absolute;
+        top: 8px;
+        left: 12px;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .block pre {
+        margin: 0;
+        padding: 30px 14px 14px;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: var(--code-fg);
+        white-space: pre;
+      }
+      .copy {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: var(--btn);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .copy:hover { background: var(--btn-hover); }
+      .copy.copied { background: #234e3c; color: #c6f6d5; border-color: #2f6b50; }
+
+      .explain {
+        border-top: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .explain > summary {
+        cursor: pointer;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        list-style: none;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: color 120ms ease;
+      }
+      .explain > summary::-webkit-details-marker { display: none; }
+      .explain > summary::before {
+        content: "▸";
+        font-size: 9px;
+        transition: transform 120ms ease;
+        display: inline-block;
+      }
+      .explain[open] > summary::before { transform: rotate(90deg); }
+      .explain > summary:hover { color: var(--text); }
+      .explain-body {
+        padding: 4px 14px 14px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text);
+      }
+      .explain-body h4 {
+        margin: 14px 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+      .explain-body p { margin: 4px 0 8px; }
+      .explain-body dl.flags {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(160px, max-content) 1fr;
+        gap: 4px 14px;
+      }
+      .explain-body dl.flags dt {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .explain-body dl.flags dt code {
+        background: transparent;
+        color: var(--accent);
+        padding: 0;
+        border: none;
+      }
+      .explain-body dl.flags dd { margin: 0; color: var(--text); }
+      .explain-body code.tmpl {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent-2);
+      }
+      .warn {
+        border-left: 3px solid #f6ad55;
+        background: rgba(246, 173, 85, 0.08);
+        padding: 8px 12px;
+        margin: 8px 0;
+        border-radius: 4px;
+        color: #f6ad55;
+      }
+
+      hr.sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+      code.inline {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>curl recipes</h1>
+    <p class="subtitle">
+      Change the variables below — every snippet on the page updates live. Click <strong>Explain</strong>
+      under any command to see what each flag does, plus other flags worth knowing.
+    </p>
+
+    <section class="vars" aria-label="Variables">
+      <h2>Variables</h2>
+      <div class="vars-grid">
+        <div class="field">
+          <label for="url">url</label>
+          <input id="url" data-var="url" value="https://api.example.com/v1/users" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="method">method</label>
+          <input id="method" data-var="method" value="GET" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="auth_token">auth token</label>
+          <input id="auth_token" data-var="auth_token" value="eyJhbGciOi..." autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="username">username</label>
+          <input id="username" data-var="username" value="alice" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="password">password</label>
+          <input id="password" data-var="password" value="secret" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="output_file">output file</label>
+          <input id="output_file" data-var="output_file" value="response.json" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="upload_file">upload file</label>
+          <input id="upload_file" data-var="upload_file" value="./photo.png" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="max_time">max time (s)</label>
+          <input id="max_time" data-var="max_time" value="30" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="retries">retries</label>
+          <input id="retries" data-var="retries" value="3" autocomplete="off" />
+        </div>
+      </div>
+      <button class="reset" id="reset-btn" type="button">Reset to defaults</button>
+    </section>
+
+    <h2>1. Basic GET with status code</h2>
+    <p>Print the response status line and headers along with the body — the quickest way to confirm an
+      endpoint is reachable and returning what you expect:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -i {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Performs a GET against <code class="tmpl" data-template="{{url}}"></code> and prints the
+            HTTP status line plus response headers before the body.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-i, --include</code></dt><dd>Include response headers (status line + header block) in the output.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-I, --head</code></dt><dd>Issue a HEAD request — headers only, no body.</dd>
+            <dt><code>-D, --dump-header FILE</code></dt><dd>Write received headers to a separate file while keeping the body on stdout.</dd>
+            <dt><code>-f, --fail</code></dt><dd>Exit non-zero on HTTP &gt;= 400 with no body output (good for scripts).</dd>
+            <dt><code>--fail-with-body</code></dt><dd>Same as <code>-f</code>, but still save the error body.</dd>
+            <dt><code>--compressed</code></dt><dd>Ask the server for a compressed response and decompress on the fly.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Silent mode (no progress bar), follow redirects, print body to stdout — the canonical "fetch and
+      pipe somewhere" invocation:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -sSL {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Fetches <code class="tmpl" data-template="{{url}}"></code> silently (no progress meter),
+            but still prints errors, and follows any 3xx redirects to a final destination.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-s, --silent</code></dt><dd>Silent mode — suppress progress meter and most error output.</dd>
+            <dt><code>-S, --show-error</code></dt><dd>Re-enable error messages when used together with <code>-s</code>.</dd>
+            <dt><code>-L, --location</code></dt><dd>Follow HTTP redirects (3xx) to the final URL.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--max-redirs N</code></dt><dd>Cap the number of redirects followed (default 50).</dd>
+            <dt><code>--location-trusted</code></dt><dd>Like <code>-L</code> but resends auth headers across hosts (use cautiously).</dd>
+            <dt><code>--no-progress-meter</code></dt><dd>Hide the progress meter without going fully silent.</dd>
+            <dt><code>-#, --progress-bar</code></dt><dd>Use a single-line bar instead of the multi-column meter.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>2. Custom method and JSON body</h2>
+    <p>POST a JSON payload with the correct content type:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -X {{method}} \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;name&quot;:&quot;{{username}}&quot;,&quot;role&quot;:&quot;admin&quot;}' \
+  {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Sends a <code class="tmpl" data-template="{{method}}"></code> request to
+            <code class="tmpl" data-template="{{url}}"></code> with a JSON body. When <code>-d</code> is
+            present, curl defaults the method to POST — <code>-X</code> overrides that when you need
+            <code>PUT</code>, <code>PATCH</code>, or <code>DELETE</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-X, --request METHOD</code></dt><dd>Override the HTTP method curl would otherwise pick.</dd>
+            <dt><code>-H, --header HEADER</code></dt><dd>Add a request header. Repeat for multiple headers.</dd>
+            <dt><code>-d, --data DATA</code></dt><dd>Send DATA as the request body using <code>application/x-www-form-urlencoded</code> unless overridden. Use <code>@file</code> to read from a file.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--json DATA</code></dt><dd>Shorthand for <code>-d</code> plus <code>Content-Type: application/json</code> and <code>Accept: application/json</code>.</dd>
+            <dt><code>--data-raw DATA</code></dt><dd>Like <code>-d</code> but does not treat <code>@</code> as a file reference.</dd>
+            <dt><code>--data-binary DATA</code></dt><dd>Send the body byte-for-byte, no CR/LF stripping (use for binary payloads).</dd>
+            <dt><code>--data-urlencode DATA</code></dt><dd>URL-encode the value before sending — handy for form fields with special chars.</dd>
+            <dt><code>-G, --get</code></dt><dd>Send <code>-d</code> data as a query string on a GET instead of a POST body.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Read the body from a file with the <code class="inline">@</code> prefix — keeps long JSON out of
+      your shell history:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -X POST \
+  -H &quot;Content-Type: application/json&quot; \
+  -d @payload.json \
+  {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>POSTs the contents of <code>payload.json</code> to
+            <code class="tmpl" data-template="{{url}}"></code>. The <code>@</code> prefix tells curl to
+            read the body from a file path; <code>@-</code> reads from stdin.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-X, --request METHOD</code></dt><dd>HTTP method to use.</dd>
+            <dt><code>-H, --header HEADER</code></dt><dd>Request header.</dd>
+            <dt><code>-d @FILE</code></dt><dd>Read POST body from FILE. Newlines are stripped — use <code>--data-binary</code> to preserve them.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--data-binary @FILE</code></dt><dd>Preserve newlines and binary content exactly.</dd>
+            <dt><code>-T, --upload-file FILE</code></dt><dd>Send FILE as the request body (PUT by default) — better for large uploads.</dd>
+            <dt><code>--expect100-timeout SECONDS</code></dt><dd>How long to wait for a 100-continue when uploading.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>3. Authentication</h2>
+    <p>Basic auth — curl base64-encodes <code class="inline">user:pass</code> into an
+      <code class="inline">Authorization: Basic …</code> header:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -u {{username}}:{{password}} {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Authenticates as <code class="tmpl" data-template="{{username}}"></code> using HTTP Basic
+            auth. If the password is sensitive, omit it (<code>-u user</code>) and curl will prompt.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-u, --user USER:PASSWORD</code></dt><dd>Server user and password. If you supply only <code>USER</code>, curl prompts for the password.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--basic</code></dt><dd>Force HTTP Basic — the default, but useful with <code>--anyauth</code>.</dd>
+            <dt><code>--digest</code></dt><dd>Use HTTP Digest authentication instead.</dd>
+            <dt><code>--anyauth</code></dt><dd>Let curl probe the server and pick the strongest supported scheme.</dd>
+            <dt><code>--ntlm</code></dt><dd>NTLM authentication (Windows / IIS).</dd>
+            <dt><code>-n, --netrc</code></dt><dd>Read credentials from <code>~/.netrc</code> keyed by hostname.</dd>
+            <dt><code>--netrc-file FILE</code></dt><dd>Read credentials from a custom netrc file.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Bearer token — paste a JWT/OAuth token into the <code class="inline">Authorization</code> header:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -H &quot;Authorization: Bearer {{auth_token}}&quot; {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Sends an <code>Authorization: Bearer</code> header carrying
+            <code class="tmpl" data-template="{{auth_token}}"></code>. In real scripts, expand a shell
+            variable instead of pasting the token (<code>-H "Authorization: Bearer ${TOKEN}"</code>).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-H, --header HEADER</code></dt><dd>Add a custom header to the request.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--oauth2-bearer TOKEN</code></dt><dd>Set the bearer token without typing the header out (equivalent result).</dd>
+            <dt><code>-K, --config FILE</code></dt><dd>Read options (including headers) from a config file — keeps tokens out of history.</dd>
+            <dt><code>-H @FILE</code></dt><dd>Read header lines from a file instead of the command line.</dd>
+            <dt><code>--aws-sigv4 PROVIDER</code></dt><dd>Sign the request with AWS Signature V4 (e.g. <code>aws:amz:us-east-1:s3</code>).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>4. Custom headers</h2>
+    <p>Stack multiple <code class="inline">-H</code> flags — header order is preserved as sent:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -H &quot;Accept: application/json&quot; \
+     -H &quot;User-Agent: my-tool/1.0&quot; \
+     -H &quot;X-Request-ID: 9b3c-2024&quot; \
+     {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Sends three custom headers to <code class="tmpl" data-template="{{url}}"></code>. To remove
+            a header curl would otherwise send (e.g. <code>Expect</code>), pass it with an empty value:
+            <code>-H "Expect:"</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-H, --header HEADER</code></dt><dd>Pass a custom header to the server. Repeat for each header. Use <code>Name:</code> (empty value) to delete a default header curl would send.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-A, --user-agent NAME</code></dt><dd>Shorthand for setting <code>User-Agent:</code>.</dd>
+            <dt><code>-e, --referer URL</code></dt><dd>Shorthand for setting <code>Referer:</code>.</dd>
+            <dt><code>-H @FILE</code></dt><dd>Read headers from a file (one per line).</dd>
+            <dt><code>--proxy-header HEADER</code></dt><dd>Send custom headers to the proxy (CONNECT) instead of the origin.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>5. Multipart file upload</h2>
+    <p>Use <code class="inline">-F</code> to build a <code class="inline">multipart/form-data</code>
+      body. Prefix a value with <code class="inline">@</code> to attach a file; plain values become form
+      fields:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -X POST \
+  -F &quot;file=@{{upload_file}}&quot; \
+  -F &quot;title=Avatar&quot; \
+  -F &quot;owner={{username}}&quot; \
+  {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Uploads <code class="tmpl" data-template="{{upload_file}}"></code> as the
+            <code>file</code> field and attaches two text fields. curl picks a MIME boundary and sets
+            <code>Content-Type: multipart/form-data</code> automatically — don't add a
+            <code>Content-Type</code> header yourself.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-F, --form NAME=CONTENT</code></dt><dd>Specify a multipart MIME field. Use <code>@PATH</code> to attach a file, <code>&lt;PATH</code> to read text content from a file.</dd>
+            <dt><code>-X, --request METHOD</code></dt><dd>Override the HTTP method (curl defaults to POST when <code>-F</code> is present, so <code>-X POST</code> here is redundant but explicit).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--form-string NAME=VALUE</code></dt><dd>Like <code>-F</code> but never interprets <code>@</code> or <code>&lt;</code> as file references — useful when a value starts with one of those characters.</dd>
+            <dt><code>-F "file=@PATH;type=MIME"</code></dt><dd>Override the auto-detected content type for an attachment.</dd>
+            <dt><code>-F "file=@PATH;filename=NAME"</code></dt><dd>Force a different filename in the multipart part.</dd>
+            <dt><code>--form-escape</code></dt><dd>Backslash-escape special characters in field names and filenames.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>6. Download to file</h2>
+    <p>Save the response body to a specific filename:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -o {{output_file}} {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Writes the body of <code class="tmpl" data-template="{{url}}"></code> to
+            <code class="tmpl" data-template="{{output_file}}"></code> instead of stdout. Headers still
+            go to stderr unless you also pass <code>-s</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-o, --output FILE</code></dt><dd>Write the body to FILE. Use <code>-</code> for stdout (the default).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--output-dir DIR</code></dt><dd>Prefix all output filenames with this directory (created with <code>--create-dirs</code>).</dd>
+            <dt><code>--create-dirs</code></dt><dd>Create missing parent directories for <code>-o</code> paths.</dd>
+            <dt><code>--no-clobber</code></dt><dd>Refuse to overwrite an existing file.</dd>
+            <dt><code>--remove-on-error</code></dt><dd>Delete the partial output if the transfer fails.</dd>
+            <dt><code>-R, --remote-time</code></dt><dd>Set the local file's mtime from the server's <code>Last-Modified</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Server-named download — use the last URL path segment as the local filename:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -O {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Saves the response from <code class="tmpl" data-template="{{url}}"></code> to a file named
+            after the URL's last path component. If the server suggests a different name via
+            <code>Content-Disposition</code>, prefer <code>-OJ</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-O, --remote-name</code></dt><dd>Write output to a file named like the remote file (last path segment of the URL).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-J, --remote-header-name</code></dt><dd>Use the filename in the server's <code>Content-Disposition</code> header (must combine with <code>-O</code>).</dd>
+            <dt><code>--remote-name-all</code></dt><dd>Apply <code>-O</code> to every URL on the command line.</dd>
+            <dt><code>-Z, --parallel</code></dt><dd>Download multiple URLs concurrently.</dd>
+            <dt><code>--parallel-max N</code></dt><dd>Cap parallel transfer concurrency.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>7. Resume and range requests</h2>
+    <p>Resume an interrupted download — <code class="inline">-C -</code> tells curl to detect the
+      existing file size and ask for the rest:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -C - -o {{output_file}} {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Continues a previous transfer into
+            <code class="tmpl" data-template="{{output_file}}"></code>. Requires the server to support
+            HTTP range requests; if not, curl restarts from byte 0.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-C, --continue-at OFFSET</code></dt><dd>Resume transfer at OFFSET bytes. Pass <code>-</code> to auto-detect the offset from the existing output file.</dd>
+            <dt><code>-o, --output FILE</code></dt><dd>Local file to append to.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--retry N</code></dt><dd>Combine with <code>-C -</code> for resilient downloads over flaky links.</dd>
+            <dt><code>--retry-all-errors</code></dt><dd>Retry on any error, not just transient transport errors.</dd>
+            <dt><code>--limit-rate SPEED</code></dt><dd>Cap bandwidth, e.g. <code>2M</code>, <code>500k</code>.</dd>
+            <dt><code>--speed-limit SPEED --speed-time SEC</code></dt><dd>Abort if transfer drops below SPEED for SEC seconds.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Fetch only the first 1024 bytes (one HTTP range request):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl --range 0-1023 -o {{output_file}} {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Asks the server for bytes 0 through 1023 of
+            <code class="tmpl" data-template="{{url}}"></code> and saves them to
+            <code class="tmpl" data-template="{{output_file}}"></code>. Useful for sniffing file
+            headers (PDF, ZIP, MP4) without downloading the whole thing.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-r, --range RANGE</code></dt><dd>Retrieve only the bytes within RANGE. Accepts <code>start-end</code>, <code>start-</code>, or <code>-suffix</code>.</dd>
+            <dt><code>-o, --output FILE</code></dt><dd>Output file.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--max-filesize BYTES</code></dt><dd>Refuse downloads larger than BYTES — fails fast before saving.</dd>
+            <dt><code>-I, --head</code></dt><dd>Get headers only — often gives you <code>Content-Length</code> for free.</dd>
+            <dt><code>--ignore-content-length</code></dt><dd>Ignore the server-advertised size (useful with broken servers).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>8. Follow redirects, timing, and verbose</h2>
+    <p>Follow 3xx redirects. By default curl does <strong>not</strong> follow them:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -L {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Follows HTTP redirects from <code class="tmpl" data-template="{{url}}"></code> until
+            it lands on a non-redirecting response or hits <code>--max-redirs</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-L, --location</code></dt><dd>Follow redirects.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--max-redirs N</code></dt><dd>Limit redirect chain depth.</dd>
+            <dt><code>--location-trusted</code></dt><dd>Forward credentials to the redirect target (risky across hosts).</dd>
+            <dt><code>--post301 / --post302 / --post303</code></dt><dd>Keep using POST across the corresponding redirect status (default behaviour switches to GET).</dd>
+            <dt><code>--proto-redir PROTOCOLS</code></dt><dd>Restrict which protocols redirects are allowed to follow (e.g. <code>=https</code>).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Print just the status code and total transfer time after the body — perfect for one-line health
+      checks and scripts:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -s -o {{output_file}} -w &quot;%{http_code} %{time_total}s\n&quot; {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Saves the body to <code class="tmpl" data-template="{{output_file}}"></code> silently and
+            prints a one-line summary like <code>200 0.184s</code>. The <code>-w</code> format string
+            supports many variables (<code>%{http_code}</code>, <code>%{time_total}</code>,
+            <code>%{size_download}</code>, etc.).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-s, --silent</code></dt><dd>Suppress progress meter and most error output.</dd>
+            <dt><code>-o, --output FILE</code></dt><dd>Send the body here so it doesn't pollute the timing line.</dd>
+            <dt><code>-w, --write-out FORMAT</code></dt><dd>After the transfer, print FORMAT with substituted variables. Use <code>%{var}</code>; supports <code>\n</code>, <code>\t</code>.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-w "@file"</code></dt><dd>Read the format string from a file (great for complex templates).</dd>
+            <dt><code>%{time_namelookup}</code></dt><dd>DNS resolution time — combine with other <code>time_*</code> vars to break down latency.</dd>
+            <dt><code>%{time_connect}</code></dt><dd>TCP connect time.</dd>
+            <dt><code>%{time_appconnect}</code></dt><dd>TLS handshake time.</dd>
+            <dt><code>%{size_download}</code></dt><dd>Number of body bytes downloaded.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Verbose — see the full request line, request headers, response headers, and TLS handshake
+      summary. Critical when something mysterious is failing:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -v {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Runs the request against <code class="tmpl" data-template="{{url}}"></code> and prints
+            verbose protocol information to stderr — lines prefixed with <code>&gt;</code> are sent,
+            <code>&lt;</code> are received, <code>*</code> are curl's own annotations.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-v, --verbose</code></dt><dd>Make the operation more talkative.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--trace FILE</code></dt><dd>Full hex+ASCII trace of everything sent and received. Use <code>-</code> for stderr.</dd>
+            <dt><code>--trace-ascii FILE</code></dt><dd>Trace without the hex column.</dd>
+            <dt><code>--trace-time</code></dt><dd>Add timestamps to each trace line.</dd>
+            <dt><code>--trace-ids</code></dt><dd>Add transfer + connection ids in verbose output (handy with <code>--parallel</code>).</dd>
+            <dt><code>--styled-output</code></dt><dd>Colourise header lines if stderr is a TTY.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>9. Cookies</h2>
+    <p>Log in once and save the session cookie jar, then reuse it on follow-up calls — emulates a
+      browser session:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -c cookies.txt -d &quot;user={{username}}&amp;pass={{password}}&quot; {{url}}
+curl -b cookies.txt {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>First command authenticates and writes Set-Cookie values to <code>cookies.txt</code>;
+            second command sends those cookies back. The cookie jar uses the Netscape format, readable
+            by browsers and other tools.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-c, --cookie-jar FILE</code></dt><dd>Save received cookies to FILE after the operation completes.</dd>
+            <dt><code>-b, --cookie DATA|FILE</code></dt><dd>Send cookies. Pass a <code>name=value;…</code> string or the path to a cookie jar.</dd>
+            <dt><code>-d, --data DATA</code></dt><dd>POST body (form-encoded by default).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-j, --junk-session-cookies</code></dt><dd>Discard session cookies when loading the jar — start fresh.</dd>
+            <dt><code>-c -</code></dt><dd>Print the cookie jar to stdout instead of writing a file.</dd>
+            <dt><code>--hsts FILE</code></dt><dd>Enable HSTS cache to remember which hosts force HTTPS.</dd>
+            <dt><code>--alt-svc FILE</code></dt><dd>Persist Alt-Svc header data (e.g. HTTP/3 upgrade hints).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>10. TLS options</h2>
+    <p>Use a custom CA bundle — required when the server cert is signed by an internal CA your system
+      doesn't trust:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl --cacert ./ca.pem {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Verifies the server certificate at <code class="tmpl" data-template="{{url}}"></code>
+            against <code>./ca.pem</code> instead of the system trust store.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--cacert FILE</code></dt><dd>CA certificate (or bundle) to verify the peer against.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--capath DIR</code></dt><dd>Directory of CA certs (hash-named) for OpenSSL-style verification.</dd>
+            <dt><code>--ca-native</code></dt><dd>Use the operating system's certificate store explicitly.</dd>
+            <dt><code>--pinnedpubkey HASHES</code></dt><dd>Pin the server's public-key SHA-256 — defence-in-depth above CA validation.</dd>
+            <dt><code>--cert-status</code></dt><dd>Require an OCSP-stapled response from the server.</dd>
+            <dt><code>--crlfile FILE</code></dt><dd>Check the cert against this CRL.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Mutual TLS — present a client certificate and private key:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl --cert ./client.pem --key ./client.key {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Authenticates to <code class="tmpl" data-template="{{url}}"></code> using mTLS: curl
+            presents <code>client.pem</code> with private key <code>client.key</code>. If the key is
+            encrypted, append the passphrase as <code>--cert ./client.pem:passphrase</code> or use
+            <code>--pass</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-E, --cert CERT[:PASSWORD]</code></dt><dd>Client certificate file (PEM by default), optionally with a passphrase.</dd>
+            <dt><code>--key KEY</code></dt><dd>Private key file (separate from the cert).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--cert-type TYPE</code></dt><dd>Cert format: <code>PEM</code> (default), <code>DER</code>, <code>P12</code>, <code>ENG</code>.</dd>
+            <dt><code>--key-type TYPE</code></dt><dd>Key format (PEM/DER/ENG).</dd>
+            <dt><code>--pass PHRASE</code></dt><dd>Passphrase for the private key.</dd>
+            <dt><code>--engine NAME</code></dt><dd>Use a crypto engine (e.g. HSM) for the key.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Pin a hostname to a specific IP without editing <code class="inline">/etc/hosts</code> — perfect
+      for testing a deploy before flipping DNS:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl --resolve api.example.com:443:127.0.0.1 {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Forces <code>api.example.com:443</code> to resolve to <code>127.0.0.1</code> for this
+            request, while still presenting <code>api.example.com</code> in the SNI and Host header so
+            TLS validation works correctly.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--resolve HOST:PORT:ADDR</code></dt><dd>Override DNS for HOST:PORT to ADDR. Multiple <code>--resolve</code> flags allowed.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--connect-to H1:P1:H2:P2</code></dt><dd>Tunnel connections to H1:P1 through H2:P2 (more general than <code>--resolve</code>).</dd>
+            <dt><code>--dns-servers ADDR</code></dt><dd>Use specific DNS resolvers for this command.</dd>
+            <dt><code>--doh-url URL</code></dt><dd>Resolve names over DNS-over-HTTPS.</dd>
+            <dt><code>-4 / -6</code></dt><dd>Force IPv4 / IPv6 resolution only.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Skip TLS verification entirely — useful against self-signed certs in dev:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -k {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <div class="warn"><strong>Warning:</strong> <code>-k</code> disables certificate validation
+            entirely. The connection is encrypted but completely vulnerable to man-in-the-middle
+            attacks — any attacker on the path can present their own cert and read/modify traffic.
+            Never use <code>-k</code> against production hosts or with real credentials; restrict it to
+            throwaway debugging against self-signed certs you control.</div>
+          <p>Allows curl to connect to <code class="tmpl" data-template="{{url}}"></code> even when the
+            server certificate cannot be verified.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-k, --insecure</code></dt><dd>Allow insecure server connections — skip CA validation, hostname check, and cert chain verification.</dd>
+          </dl>
+          <h4>Safer alternatives</h4>
+          <dl class="flags">
+            <dt><code>--cacert FILE</code></dt><dd>Trust the specific CA that issued the cert instead of disabling validation.</dd>
+            <dt><code>--resolve HOST:PORT:IP</code></dt><dd>Talk to a specific IP while keeping the original hostname for SNI/validation.</dd>
+            <dt><code>--ssl-no-revoke</code></dt><dd>Only skip CRL/OCSP checks (Schannel) — much narrower than <code>-k</code>.</dd>
+            <dt><code>--tls-max VERSION</code></dt><dd>Pin a TLS version to debug handshake issues without disabling validation.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>11. Retries and timeouts</h2>
+    <p>Retry transient failures and cap total transfer time — sensible defaults for any production
+      script:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl --retry {{retries}} --retry-delay 2 --max-time {{max_time}} {{url}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Tries the request up to <code class="tmpl" data-template="{{retries}}"></code> times with
+            a 2-second pause between attempts, and aborts if the whole operation takes longer than
+            <code class="tmpl" data-template="{{max_time}}"></code> seconds (including all retries).
+            By default only transient transport errors retry — see <code>--retry-all-errors</code> to
+            broaden it.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--retry N</code></dt><dd>Retry the request if a transient problem occurs (DNS failure, refused connection, HTTP 408/429/500/502/503/504, etc.).</dd>
+            <dt><code>--retry-delay SECONDS</code></dt><dd>Fixed wait between retries (default uses exponential backoff).</dd>
+            <dt><code>-m, --max-time SECONDS</code></dt><dd>Maximum total time for the entire operation, including retries.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--retry-all-errors</code></dt><dd>Retry on any error, including HTTP 4xx — combine with <code>--retry</code>.</dd>
+            <dt><code>--retry-connrefused</code></dt><dd>Treat "connection refused" as transient (default: no).</dd>
+            <dt><code>--retry-max-time SECONDS</code></dt><dd>Stop retrying after this elapsed time, regardless of <code>--retry</code>.</dd>
+            <dt><code>--connect-timeout SECONDS</code></dt><dd>Maximum time allowed for the connection phase only.</dd>
+            <dt><code>--keepalive-time SECONDS</code></dt><dd>TCP keepalive probe interval.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>12. Pipe to jq</h2>
+    <p>Silent mode plus a pipe into <code class="inline">jq</code> — the universal "explore a JSON API"
+      one-liner:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="curl -s {{url}} | jq ."></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Fetches <code class="tmpl" data-template="{{url}}"></code> silently (no progress meter to
+            corrupt the pipe), pipes the JSON body into <code>jq</code> for pretty-printing and
+            colour. Use <code>-sS</code> if you want errors to still appear.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-s, --silent</code></dt><dd>Silent mode so the progress meter doesn't end up on stdout.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-S, --show-error</code></dt><dd>Combine with <code>-s</code> to keep error messages.</dd>
+            <dt><code>-f, --fail</code></dt><dd>Exit non-zero on HTTP errors so a pipeline fails loudly.</dd>
+            <dt><code>--fail-with-body</code></dt><dd>Fail on errors but still let <code>jq</code> see the error body.</dd>
+            <dt><code>jq '.data[].name'</code></dt><dd>Drill into specific fields rather than dumping the whole document.</dd>
+            <dt><code>jq -r</code></dt><dd>Raw output (no surrounding quotes) — handy when feeding values into other commands.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <script>
+      (function () {
+        const DEFAULTS = {
+          url: "https://api.example.com/v1/users",
+          method: "GET",
+          auth_token: "eyJhbGciOi...",
+          username: "alice",
+          password: "secret",
+          output_file: "response.json",
+          upload_file: "./photo.png",
+          max_time: "30",
+          retries: "3"
+        };
+
+        const inputs = document.querySelectorAll("input[data-var]");
+        const templated = document.querySelectorAll("[data-template]");
+
+        function readVars() {
+          const vars = {};
+          inputs.forEach((i) => {
+            vars[i.dataset.var] = i.value;
+          });
+          return vars;
+        }
+
+        function decode(html) {
+          const t = document.createElement("textarea");
+          t.innerHTML = html;
+          return t.value;
+        }
+
+        function render() {
+          const vars = readVars();
+          templated.forEach((el) => {
+            const tpl = decode(el.getAttribute("data-template"));
+            const out = tpl.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+              Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "{{" + key + "}}"
+            );
+            el.textContent = out;
+          });
+        }
+
+        inputs.forEach((i) => i.addEventListener("input", render));
+
+        document.querySelectorAll(".copy").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const block = btn.closest(".block");
+            const code = block ? block.querySelector("pre > code") : null;
+            const text = code ? code.textContent : "";
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch (e) {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              try { document.execCommand("copy"); } catch (_) {}
+              document.body.removeChild(ta);
+            }
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("copied");
+            }, 1200);
+          });
+        });
+
+        document.getElementById("reset-btn").addEventListener("click", () => {
+          inputs.forEach((i) => {
+            i.value = DEFAULTS[i.dataset.var] ?? "";
+          });
+          render();
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,891 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>openssl certificates &amp; keys</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-2: #1c2230;
+        --border: #262d3b;
+        --text: #e6e8ee;
+        --muted: #8b94a7;
+        --accent: #7aa2ff;
+        --accent-2: #9ae6b4;
+        --code-bg: #0b0d12;
+        --code-fg: #e6e8ee;
+        --btn: #2a3142;
+        --btn-hover: #38415a;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        line-height: 1.55;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 24px 80px;
+      }
+      h1 { font-size: 28px; margin: 0 0 6px; }
+      h2 { font-size: 20px; margin: 36px 0 10px; color: var(--accent); }
+      p, li { color: var(--text); }
+      .subtitle { color: var(--muted); margin: 0 0 24px; }
+      .vars {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 18px 8px;
+        position: sticky;
+        top: 12px;
+        z-index: 5;
+        box-shadow: var(--shadow);
+      }
+      .vars h2 { margin: 0 0 12px; font-size: 16px; color: var(--accent-2); }
+      .vars-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 14px;
+      }
+      .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+      .field label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .field input {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 120ms ease;
+      }
+      .field input:focus { border-color: var(--accent); }
+      .reset {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        margin-top: 6px;
+      }
+      .reset:hover { color: var(--text); border-color: var(--accent); }
+
+      .block {
+        position: relative;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin: 10px 0 18px;
+        overflow: hidden;
+      }
+      .block .lang {
+        position: absolute;
+        top: 8px;
+        left: 12px;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .block pre {
+        margin: 0;
+        padding: 30px 14px 14px;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: var(--code-fg);
+        white-space: pre;
+      }
+      .copy {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: var(--btn);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .copy:hover { background: var(--btn-hover); }
+      .copy.copied { background: #234e3c; color: #c6f6d5; border-color: #2f6b50; }
+
+      .explain {
+        border-top: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .explain > summary {
+        cursor: pointer;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        list-style: none;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: color 120ms ease;
+      }
+      .explain > summary::-webkit-details-marker { display: none; }
+      .explain > summary::before {
+        content: "▸";
+        font-size: 9px;
+        transition: transform 120ms ease;
+        display: inline-block;
+      }
+      .explain[open] > summary::before { transform: rotate(90deg); }
+      .explain > summary:hover { color: var(--text); }
+      .explain-body {
+        padding: 4px 14px 14px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text);
+      }
+      .explain-body h4 {
+        margin: 14px 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+      .explain-body p { margin: 4px 0 8px; }
+      .explain-body dl.flags {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(160px, max-content) 1fr;
+        gap: 4px 14px;
+      }
+      .explain-body dl.flags dt {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .explain-body dl.flags dt code {
+        background: transparent;
+        color: var(--accent);
+        padding: 0;
+        border: none;
+      }
+      .explain-body dl.flags dd { margin: 0; color: var(--text); }
+      .explain-body code.tmpl {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent-2);
+      }
+
+      hr.sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+      code.inline {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>openssl certificates &amp; keys</h1>
+    <p class="subtitle">
+      Change the variables below — every snippet on the page updates live. Click <strong>Explain</strong>
+      under any command to see what each flag does, plus other flags worth knowing.
+    </p>
+
+    <section class="vars" aria-label="Variables">
+      <h2>Variables</h2>
+      <div class="vars-grid">
+        <div class="field">
+          <label for="key_file">key file</label>
+          <input id="key_file" data-var="key_file" value="key.pem" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="cert_file">cert file</label>
+          <input id="cert_file" data-var="cert_file" value="cert.pem" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="csr_file">csr file</label>
+          <input id="csr_file" data-var="csr_file" value="req.csr" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="p12_file">pkcs12 file</label>
+          <input id="p12_file" data-var="p12_file" value="bundle.p12" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="chain_file">chain file</label>
+          <input id="chain_file" data-var="chain_file" value="chain.pem" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="subject">subject</label>
+          <input id="subject" data-var="subject" value="/CN=example.com" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="days">days valid</label>
+          <input id="days" data-var="days" value="365" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="key_size">key size (bits)</label>
+          <input id="key_size" data-var="key_size" value="4096" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="host">host</label>
+          <input id="host" data-var="host" value="example.com" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="port">port</label>
+          <input id="port" data-var="port" value="443" autocomplete="off" />
+        </div>
+      </div>
+      <button class="reset" id="reset-btn" type="button">Reset to defaults</button>
+    </section>
+
+    <h2>1. Generate a private key</h2>
+    <p>Generate a fresh RSA private key in the modern <code class="inline">genpkey</code> form. The
+      output is an unencrypted PEM — add <code class="inline">-pass pass:secret</code> (or
+      <code class="inline">-aes256</code> via <code class="inline">genrsa</code>) to encrypt at rest:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:{{key_size}} -out {{key_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Generates a <code class="tmpl" data-template="{{key_size}}"></code>-bit RSA private key
+            and writes the PEM to <code class="tmpl" data-template="{{key_file}}"></code>. Common
+            sizes are <code>2048</code> (minimum for new certs), <code>3072</code>, and
+            <code>4096</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-algorithm name</code></dt><dd>Public key algorithm to use (must precede <code>-pkeyopt</code>). RSA, EC, ED25519, ED448, X25519, X448, etc.</dd>
+            <dt><code>-pkeyopt opt:value</code></dt><dd>Set an algorithm option. For RSA: <code>rsa_keygen_bits:N</code>, <code>rsa_keygen_pubexp:N</code>.</dd>
+            <dt><code>-out file</code></dt><dd>Output file to write to (default stdout).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-outform DER | PEM</code></dt><dd>Output format. PEM is default (base64 text); DER is the binary form.</dd>
+            <dt><code>-pass arg</code></dt><dd>Output file password source, e.g. <code>pass:secret</code>, <code>env:VAR</code>, <code>file:path</code>.</dd>
+            <dt><code>-text</code></dt><dd>Also print the private key in human-readable form (useful for verifying parameters).</dd>
+            <dt><code>-genparam</code></dt><dd>Generate algorithm parameters instead of a private key (needed first for DH/DSA).</dd>
+            <dt><code>-paramfile file</code></dt><dd>Load public-key algorithm parameters from this file (must precede <code>-pkeyopt</code>).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Older but still common <code class="inline">genrsa</code> form — equivalent output, fewer
+      keystrokes:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl genrsa -out {{key_file}} {{key_size}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Writes a <code class="tmpl" data-template="{{key_size}}"></code>-bit RSA key to
+            <code class="tmpl" data-template="{{key_file}}"></code>. Bare <code>genrsa</code> is the
+            legacy interface — <code>genpkey</code> is the cross-algorithm replacement.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-out file</code></dt><dd>Output the key to <code>file</code>.</dd>
+            <dt><code>numbits</code></dt><dd>Positional key size in bits (trailing argument).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-aes128 | -aes192 | -aes256</code></dt><dd>Encrypt the PEM output with CBC-mode AES at the named strength.</dd>
+            <dt><code>-des3</code></dt><dd>Encrypt the generated key with triple-DES (older but widely supported).</dd>
+            <dt><code>-passout arg</code></dt><dd>Output file passphrase source (avoids the interactive prompt).</dd>
+            <dt><code>-3 | -f4</code></dt><dd>Choose the RSA public exponent — <code>3</code> or <code>F4</code> (<code>0x10001</code>, the default).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>2. Generate an EC key</h2>
+    <p>Elliptic-curve keys are dramatically smaller and faster than RSA at equivalent security.
+      P-256 is the standard default; bump to P-384 or P-521 for higher security margins:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out ec.key"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Generates an EC private key on the P-256 curve and writes it to <code>ec.key</code>.
+            Equivalent to <code>secp256r1</code> / <code>prime256v1</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-algorithm EC</code></dt><dd>Select the elliptic-curve algorithm family.</dd>
+            <dt><code>-pkeyopt ec_paramgen_curve:NAME</code></dt><dd>Pick the named curve. Common values: <code>P-256</code>, <code>P-384</code>, <code>P-521</code>, <code>secp256k1</code>.</dd>
+            <dt><code>-out file</code></dt><dd>Output path for the PEM-encoded key.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-pkeyopt ec_param_enc:named_curve</code></dt><dd>Encode the curve by OID name (default and recommended) rather than embedding raw parameters.</dd>
+            <dt><code>-text</code></dt><dd>Also print the key in human-readable form.</dd>
+            <dt><code>-pass arg</code></dt><dd>Encrypt the output PEM with a passphrase from the given source.</dd>
+            <dt><code>-algorithm ED25519</code></dt><dd>Alternative modern algorithm — no <code>-pkeyopt</code> needed, smaller keys, fast.</dd>
+          </dl>
+          <p>List supported curves with <code>openssl ecparam -list_curves</code>.</p>
+        </div>
+      </details>
+    </div>
+
+    <h2>3. Generate a CSR</h2>
+    <p>Build a Certificate Signing Request from an existing private key. The
+      <code class="inline">-subj</code> flag inlines the Distinguished Name so the command runs
+      non-interactively — convenient in scripts and CI:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl req -new -key {{key_file}} -out {{csr_file}} -subj &quot;{{subject}}&quot;"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads the private key <code class="tmpl" data-template="{{key_file}}"></code>, signs a
+            new CSR with subject <code class="tmpl" data-template="{{subject}}"></code>, and writes
+            it to <code class="tmpl" data-template="{{csr_file}}"></code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-new</code></dt><dd>Generate a new certificate request.</dd>
+            <dt><code>-key file</code></dt><dd>Private key file used to sign the request.</dd>
+            <dt><code>-out file</code></dt><dd>Output file for the CSR (default stdout).</dd>
+            <dt><code>-subj name</code></dt><dd>Set the request subject inline, skipping interactive prompts. Format: <code>/C=US/ST=CA/O=Acme/CN=example.com</code>.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-addext key=value</code></dt><dd>Add an extension to the request, e.g. <code>-addext "subjectAltName=DNS:example.com,DNS:www.example.com"</code>. Repeatable.</dd>
+            <dt><code>-newkey arg</code></dt><dd>Generate a fresh key alongside the request, e.g. <code>-newkey rsa:4096</code> or <code>-newkey ec:&lt;paramfile&gt;</code>.</dd>
+            <dt><code>-nodes</code></dt><dd>Don't encrypt the new private key if one is generated.</dd>
+            <dt><code>-config file</code></dt><dd>Use a config file for default DN and extensions (cleaner than <code>-addext</code> for many SANs).</dd>
+            <dt><code>-batch</code></dt><dd>Operate non-interactively, taking all values from the config / <code>-subj</code>.</dd>
+            <dt><code>-utf8</code></dt><dd>Treat the input characters as UTF-8 (needed for non-ASCII DN values).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>4. Self-signed cert</h2>
+    <p>Single command that generates a fresh RSA key <em>and</em> a self-signed X.509 cert — useful
+      for local TLS, internal services, and test fixtures:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl req -x509 -newkey rsa:{{key_size}} -keyout {{key_file}} -out {{cert_file}} -days {{days}} -nodes -subj &quot;{{subject}}&quot;"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Generates a fresh <code class="tmpl" data-template="{{key_size}}"></code>-bit RSA key
+            and a self-signed certificate valid for
+            <code class="tmpl" data-template="{{days}}"></code> days, writing
+            <code class="tmpl" data-template="{{key_file}}"></code> and
+            <code class="tmpl" data-template="{{cert_file}}"></code>. <code>-nodes</code> ("no DES")
+            leaves the private key unencrypted on disk.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-x509</code></dt><dd>Output a self-signed X.509 certificate instead of a CSR.</dd>
+            <dt><code>-newkey arg</code></dt><dd>Generate a new key using these parameters, e.g. <code>rsa:4096</code>, <code>ec:&lt;paramfile&gt;</code>.</dd>
+            <dt><code>-keyout file</code></dt><dd>Private key output file.</dd>
+            <dt><code>-out file</code></dt><dd>Certificate output file.</dd>
+            <dt><code>-days N</code></dt><dd>Number of days the generated certificate is valid for.</dd>
+            <dt><code>-nodes</code></dt><dd>Do not encrypt the output private key.</dd>
+            <dt><code>-subj name</code></dt><dd>Set the certificate subject inline (skips interactive prompts).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-addext key=value</code></dt><dd>Add an X.509 extension, e.g. <code>-addext "subjectAltName=DNS:example.com,IP:10.0.0.1"</code>.</dd>
+            <dt><code>-sha256</code></dt><dd>Use SHA-256 as the signature digest (default on modern openssl; explicit is safer on old versions).</dd>
+            <dt><code>-set_serial N</code></dt><dd>Use a specific serial number instead of a random one.</dd>
+            <dt><code>-extensions section</code></dt><dd>Apply X.509 v3 extensions from the named section of a config file.</dd>
+            <dt><code>-keyform DER | PEM</code></dt><dd>Format of the key output (PEM is default).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>5. Inspect a cert</h2>
+    <p>Full human-readable dump — subject, issuer, validity, SANs, key info, extensions, signature:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl x509 -in {{cert_file}} -noout -text"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Parses <code class="tmpl" data-template="{{cert_file}}"></code> and prints the full
+            decoded certificate in text form. <code>-noout</code> suppresses the re-encoded PEM
+            that <code>x509</code> would otherwise emit alongside the text.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-in file</code></dt><dd>Input certificate file (default stdin).</dd>
+            <dt><code>-noout</code></dt><dd>Suppress the re-encoded certificate output.</dd>
+            <dt><code>-text</code></dt><dd>Print the certificate in text form.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-inform DER | PEM</code></dt><dd>Input format. Default PEM; switch to DER for binary <code>.cer</code> / <code>.crt</code> files.</dd>
+            <dt><code>-certopt option</code></dt><dd>Tweak the text output (e.g. <code>-certopt no_sigdump,no_pubkey</code> for a terser dump).</dd>
+            <dt><code>-pubkey</code></dt><dd>Output the certificate's public key in PEM.</dd>
+            <dt><code>-modulus</code></dt><dd>Print the RSA modulus — useful when matching a key to a cert.</dd>
+            <dt><code>-checkend SECONDS</code></dt><dd>Exit 1 if the cert expires within SECONDS — handy for monitoring scripts (<code>-checkend 86400</code> = 24h).</dd>
+            <dt><code>-purpose</code></dt><dd>Print the certificate's intended purposes (sslclient, sslserver, etc.).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Just the fields you usually want — subject, issuer, validity window, and SHA-1 fingerprint:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl x509 -in {{cert_file}} -noout -subject -issuer -dates -fingerprint"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Prints only the requested fields from
+            <code class="tmpl" data-template="{{cert_file}}"></code>: the Subject DN, Issuer DN,
+            notBefore + notAfter dates, and the certificate's SHA-1 fingerprint. Combine flags
+            freely — order doesn't matter and each prints one labelled line.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-subject</code></dt><dd>Print the subject name.</dd>
+            <dt><code>-issuer</code></dt><dd>Print the issuer name.</dd>
+            <dt><code>-dates</code></dt><dd>Print both <code>notBefore</code> and <code>notAfter</code>.</dd>
+            <dt><code>-fingerprint</code></dt><dd>Print the certificate fingerprint (SHA-1 by default).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-sha256 -fingerprint</code></dt><dd>Request a SHA-256 fingerprint instead of SHA-1 — modern tools usually expect this.</dd>
+            <dt><code>-startdate</code> / <code>-enddate</code></dt><dd>Print only <code>notBefore</code> / <code>notAfter</code> in isolation.</dd>
+            <dt><code>-serial</code></dt><dd>Print the certificate's serial number.</dd>
+            <dt><code>-email</code></dt><dd>Print any email addresses in the subject or SANs.</dd>
+            <dt><code>-ocsp_uri</code></dt><dd>Print the OCSP responder URL(s) advertised by the cert.</dd>
+            <dt><code>-hash</code> / <code>-issuer_hash</code></dt><dd>Print the subject / issuer hash used by <code>c_rehash</code> for trust stores.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>6. Inspect a CSR</h2>
+    <p>Decode a Certificate Signing Request and verify its self-signature in one command — both
+      sanity-checks the file and confirms the embedded public key matches the signing key:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl req -in {{csr_file}} -noout -text -verify"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads <code class="tmpl" data-template="{{csr_file}}"></code>, prints its decoded
+            content (subject, public key, extensions, requested SANs), and runs
+            <code>-verify</code> against the embedded public key. A valid CSR prints
+            <code>verify OK</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-in file</code></dt><dd>Input file (default stdin).</dd>
+            <dt><code>-noout</code></dt><dd>Do not output the re-encoded request.</dd>
+            <dt><code>-text</code></dt><dd>Print the request in text form.</dd>
+            <dt><code>-verify</code></dt><dd>Verify the signature on the request.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-subject</code></dt><dd>Print only the subject DN.</dd>
+            <dt><code>-pubkey</code></dt><dd>Output the public key contained in the request.</dd>
+            <dt><code>-modulus</code></dt><dd>Print the RSA modulus — pair with the same flag on the key + cert to confirm all three match.</dd>
+            <dt><code>-reqopt option</code></dt><dd>Adjust the text output (e.g. <code>-reqopt no_sigdump</code>).</dd>
+            <dt><code>-inform DER | PEM</code></dt><dd>Input format. Some CAs hand back DER-encoded CSRs.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>7. Inspect a private key</h2>
+    <p>Confirm the algorithm, curve / key size, and modulus of a key on disk — useful when a server
+      stops handshaking and you want to be sure you're pointing at the key you think you are:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl pkey -in {{key_file}} -noout -text"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads <code class="tmpl" data-template="{{key_file}}"></code> and prints the key's
+            parameters in human-readable form. Works for any algorithm
+            <code>genpkey</code>/<code>pkey</code> understands (RSA, EC, ED25519, X25519, etc.).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-in file</code></dt><dd>Input file (default stdin).</dd>
+            <dt><code>-noout</code></dt><dd>Do not print the encoded version of the key.</dd>
+            <dt><code>-text</code></dt><dd>Print the public/private key in plain text.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-text_pub</code></dt><dd>Print only the public components — handy for sharing or pinning without leaking the private half.</dd>
+            <dt><code>-pubout</code></dt><dd>Output a public key (default is private) — extract the matching public PEM.</dd>
+            <dt><code>-pubin</code></dt><dd>Treat the input file as a public key (default is private).</dd>
+            <dt><code>-passin src</code></dt><dd>Passphrase source for an encrypted input key, e.g. <code>pass:secret</code>, <code>env:VAR</code>, <code>file:path</code>.</dd>
+            <dt><code>-outform DER | PEM</code></dt><dd>Output format when re-encoding.</dd>
+            <dt><code>-aes256</code></dt><dd>Re-encrypt the output with AES-256 (and a new passphrase via <code>-passout</code>).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>8. Verify a chain</h2>
+    <p>Check that <code class="inline">cert.pem</code> chains up to something in
+      <code class="inline">chain.pem</code>. The chain file should contain the issuing
+      intermediate(s) and root concatenated together as PEM:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl verify -CAfile {{chain_file}} {{cert_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Validates <code class="tmpl" data-template="{{cert_file}}"></code> against the trust
+            anchors in <code class="tmpl" data-template="{{chain_file}}"></code>. Prints
+            <code>OK</code> and exits 0 on success; on failure it prints the depth and reason
+            (e.g. <code>unable to get issuer certificate</code>,
+            <code>certificate has expired</code>, <code>self signed certificate</code>).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-CAfile file</code></dt><dd>Certificate Authority file — trusted root(s) and/or intermediates in PEM.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-CApath directory</code></dt><dd>Directory of CA certificates (must be hashed with <code>c_rehash</code>).</dd>
+            <dt><code>-untrusted file</code></dt><dd>Untrusted intermediates that may complete the chain but aren't themselves trust anchors. Pair with a root-only <code>-CAfile</code>.</dd>
+            <dt><code>-CRLfile file</code></dt><dd>Use a CRL when checking revocation.</dd>
+            <dt><code>-crl_check</code></dt><dd>Enable CRL checking for the leaf certificate (combine with <code>-CRLfile</code>).</dd>
+            <dt><code>-crl_check_all</code></dt><dd>Enable CRL checking for every certificate in the chain.</dd>
+            <dt><code>-purpose name</code></dt><dd>Verify the cert is valid for a specific purpose, e.g. <code>sslserver</code>, <code>sslclient</code>, <code>smimesign</code>.</dd>
+            <dt><code>-verbose</code></dt><dd>Print verbose progress through the verification.</dd>
+            <dt><code>-x509_strict</code></dt><dd>Apply strict X.509 rules (disables compatibility workarounds).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>9. Test a TLS endpoint</h2>
+    <p>Connect to a TLS server, set SNI explicitly (most modern servers require it), and print the
+      whole certificate chain it presents. The <code class="inline">&lt; /dev/null</code> closes
+      stdin so the command returns instead of hanging in the TLS session:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl s_client -connect {{host}}:{{port}} -servername {{host}} -showcerts &lt; /dev/null"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Opens a TLS session to <code class="tmpl" data-template="{{host}}"></code>:<code class="tmpl" data-template="{{port}}"></code>,
+            advertising SNI <code class="tmpl" data-template="{{host}}"></code>, and prints the
+            full chain the server presents. Pipe into
+            <code>openssl x509 -noout -dates</code> to extract just the leaf's validity window.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-connect host:port</code></dt><dd>Who to connect to (default is <code>localhost:4433</code>).</dd>
+            <dt><code>-servername name</code></dt><dd>Set TLS extension <code>server_name</code> in ClientHello (SNI). Required by most virtual-host TLS terminators.</dd>
+            <dt><code>-showcerts</code></dt><dd>Show all server certificates in the chain (default prints only the leaf).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-CAfile file</code></dt><dd>PEM file of CAs to trust for verification.</dd>
+            <dt><code>-tls1_2 | -tls1_3</code></dt><dd>Force a specific TLS version (or <code>-no_tls1_3</code> to exclude one).</dd>
+            <dt><code>-cipher list</code></dt><dd>Restrict cipher suites for TLS 1.2 and below (see <code>openssl ciphers</code>).</dd>
+            <dt><code>-alpn protocols</code></dt><dd>Advertise ALPN protocols (e.g. <code>-alpn h2,http/1.1</code>).</dd>
+            <dt><code>-starttls protocol</code></dt><dd>Issue STARTTLS for <code>smtp</code>, <code>imap</code>, <code>pop3</code>, <code>ftp</code>, <code>xmpp</code>, <code>lmtp</code> before TLS.</dd>
+            <dt><code>-status</code></dt><dd>Send an OCSP status request and print the response.</dd>
+            <dt><code>-verify N</code></dt><dd>Turn on peer verification with a maximum chain depth of N.</dd>
+            <dt><code>-debug</code> / <code>-msg</code> / <code>-state</code></dt><dd>Increasingly verbose diagnostics — wire bytes, protocol messages, state transitions.</dd>
+            <dt><code>-proxy host:port</code></dt><dd>Connect via an HTTP proxy.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>10. Convert formats</h2>
+    <p>PEM (base64) to DER (binary). Useful for tools that expect <code class="inline">.cer</code> /
+      <code class="inline">.crt</code> binary input:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl x509 -in {{cert_file}} -outform der -out cert.der"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads PEM cert <code class="tmpl" data-template="{{cert_file}}"></code> and writes the
+            binary DER equivalent to <code>cert.der</code>. Reverse the conversion by adding
+            <code>-inform der -outform pem</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-in file</code></dt><dd>Input file (default stdin).</dd>
+            <dt><code>-outform DER | PEM | NET</code></dt><dd>Output format. DER is the binary X.690 encoding; PEM is its base64 + headers wrapper.</dd>
+            <dt><code>-out file</code></dt><dd>Output file (default stdout).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-inform DER | PEM | NET</code></dt><dd>Input format (default PEM). Use <code>-inform der</code> to convert a binary cert back to PEM.</dd>
+            <dt><code>-text</code></dt><dd>Print the human-readable form alongside the output.</dd>
+            <dt><code>-fingerprint</code></dt><dd>Quick way to confirm the converted file matches by hash.</dd>
+          </dl>
+          <p>Same pattern works for keys via <code>openssl pkey -in key.pem -outform der -out key.der</code>.</p>
+        </div>
+      </details>
+    </div>
+
+    <p>Bundle a key + cert (+ optional chain) into a PKCS#12 / <code class="inline">.p12</code> /
+      <code class="inline">.pfx</code> file — the format Java keystores, Windows, and many appliances
+      ingest:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl pkcs12 -export -inkey {{key_file}} -in {{cert_file}} -out {{p12_file}} -name &quot;{{host}}&quot;"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Packages <code class="tmpl" data-template="{{key_file}}"></code> +
+            <code class="tmpl" data-template="{{cert_file}}"></code> into the PKCS#12 bundle
+            <code class="tmpl" data-template="{{p12_file}}"></code> with friendly name
+            <code class="tmpl" data-template="{{host}}"></code>. You'll be prompted for an export
+            password — set it to empty when the consumer doesn't support passwords.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-export</code></dt><dd>Output a PKCS#12 file (rather than parsing one).</dd>
+            <dt><code>-inkey file</code></dt><dd>Private key to include (PEM or DER).</dd>
+            <dt><code>-in file</code></dt><dd>Input certificate file (PEM, possibly with chain certs appended).</dd>
+            <dt><code>-out file</code></dt><dd>Output PKCS#12 filename.</dd>
+            <dt><code>-name name</code></dt><dd>Friendly name (alias) for the entry.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-certfile file</code></dt><dd>Add additional CA certs (intermediates / roots) to the bundle.</dd>
+            <dt><code>-chain</code></dt><dd>Build and include the full chain using <code>-CAfile</code> / <code>-CApath</code> as trust sources.</dd>
+            <dt><code>-passout arg</code></dt><dd>Non-interactive export password source, e.g. <code>pass:</code>, <code>pass:secret</code>, <code>env:VAR</code>.</dd>
+            <dt><code>-aes256</code></dt><dd>Encrypt the PKCS#12 with AES-256 (modern; default on some openssl versions is weaker).</dd>
+            <dt><code>-macalg sha256</code></dt><dd>Use SHA-256 for the integrity MAC (default is SHA-1).</dd>
+            <dt><code>-caname name</code></dt><dd>Friendly name for a CA in the bundle (repeatable).</dd>
+            <dt><code>-LMK</code></dt><dd>Add the local-machine-keyset attribute (Windows interop).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Pull the private key back out of a PKCS#12 — swap <code class="inline">-nocerts</code> for
+      <code class="inline">-clcerts -nokeys</code> to extract only the leaf certificate:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl pkcs12 -in {{p12_file}} -nocerts -nodes -out {{key_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads PKCS#12 bundle <code class="tmpl" data-template="{{p12_file}}"></code>, ignores
+            the embedded certificates (<code>-nocerts</code>), and writes the unencrypted private
+            key (<code>-nodes</code>) to <code class="tmpl" data-template="{{key_file}}"></code>.
+            You'll be prompted for the import password.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-in file</code></dt><dd>Input PKCS#12 filename.</dd>
+            <dt><code>-nocerts</code></dt><dd>Don't output certificates from the bundle.</dd>
+            <dt><code>-nodes</code></dt><dd>Don't encrypt the extracted private key.</dd>
+            <dt><code>-out file</code></dt><dd>Output filename for the extracted PEM.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-clcerts</code></dt><dd>Only output client (leaf) certificates — combine with <code>-nokeys</code> to extract just the cert.</dd>
+            <dt><code>-cacerts</code></dt><dd>Only output CA certificates (intermediates / roots).</dd>
+            <dt><code>-nokeys</code></dt><dd>Don't output the private key.</dd>
+            <dt><code>-passin arg</code></dt><dd>Non-interactive import password source.</dd>
+            <dt><code>-info</code></dt><dd>Print information about the PKCS#12 structure (PBE algorithms, iteration counts, MAC).</dd>
+            <dt><code>-noout</code></dt><dd>Don't output anything — combine with <code>-info</code> to just inspect.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>11. Hash &amp; encode</h2>
+    <p>SHA-256 a file — same checksum you'd get from <code class="inline">shasum -a 256</code> but
+      with no extra dependency:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl dgst -sha256 file"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Prints <code>SHA256(file)= &lt;hex&gt;</code>. Swap <code>-sha256</code> for any other
+            digest (<code>-sha1</code>, <code>-sha512</code>, <code>-md5</code>, etc.). Pass
+            multiple files for a digest per line; pipe stdin with no file argument for streaming
+            input.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-sha256</code></dt><dd>Use SHA-256 as the message digest.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-sha1</code> / <code>-sha384</code> / <code>-sha512</code> / <code>-md5</code></dt><dd>Pick an alternative digest algorithm.</dd>
+            <dt><code>-hex</code></dt><dd>Output as hex (default for most digests).</dd>
+            <dt><code>-binary</code></dt><dd>Raw binary digest — pipe into <code>xxd</code>, <code>base64</code>, etc.</dd>
+            <dt><code>-r</code></dt><dd>coreutils-style output (<code>&lt;digest&gt;  &lt;file&gt;</code>) — easy to feed back into <code>sha256sum -c</code>.</dd>
+            <dt><code>-hmac key</code></dt><dd>Compute an HMAC keyed with the given secret.</dd>
+            <dt><code>-sign keyfile</code> / <code>-verify pubkey</code></dt><dd>Sign or verify with an asymmetric key instead of just hashing.</dd>
+            <dt><code>-out file</code></dt><dd>Write the digest to a file instead of stdout.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Base64-encode whatever comes on stdin — decode with <code class="inline">-d</code>. Useful for
+      stuffing binary into env vars, JSON payloads, or Kubernetes <code class="inline">Secret</code>
+      manifests:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl base64"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads from stdin, writes base64 to stdout, wrapping at 64 columns. Equivalent to GNU
+            <code>base64</code> with default wrapping. End input with Ctrl-D, or pipe a file in.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>base64</code></dt><dd>Cipher-command alias selecting base64 encoding (no flags needed for default encode).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-d</code></dt><dd>Decode instead of encode.</dd>
+            <dt><code>-A</code></dt><dd>Process the whole input as one line (don't insert newlines / accept wrapped input).</dd>
+            <dt><code>-in file</code></dt><dd>Read from <code>file</code> instead of stdin.</dd>
+            <dt><code>-out file</code></dt><dd>Write to <code>file</code> instead of stdout.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Generate 32 cryptographically-random bytes, encoded as base64 — a solid one-liner for
+      session keys, API secrets, JWT signing keys, or anywhere you need high-entropy strings:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="openssl rand -base64 32"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Emits 32 random bytes (256 bits) from openssl's CSPRNG, encoded as base64 — about 44
+            printable characters. Swap <code>32</code> for any byte count, or
+            <code>-base64</code> for <code>-hex</code> if you'd rather have hex.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-base64</code></dt><dd>Base64-encode the output.</dd>
+            <dt><code>num</code></dt><dd>Trailing positional argument — number of random bytes.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-hex</code></dt><dd>Hexadecimal output (e.g. <code>openssl rand -hex 16</code> for a 128-bit hex token).</dd>
+            <dt><code>-out file</code></dt><dd>Write to a file instead of stdout — handy for generating raw key material.</dd>
+          </dl>
+          <p>Underlying entropy comes from the OS RNG (<code>/dev/urandom</code> on macOS/Linux).</p>
+        </div>
+      </details>
+    </div>
+
+    <script>
+      (function () {
+        const DEFAULTS = {
+          key_file: "key.pem",
+          cert_file: "cert.pem",
+          csr_file: "req.csr",
+          p12_file: "bundle.p12",
+          chain_file: "chain.pem",
+          subject: "/CN=example.com",
+          days: "365",
+          key_size: "4096",
+          host: "example.com",
+          port: "443"
+        };
+
+        const inputs = document.querySelectorAll("input[data-var]");
+        const templated = document.querySelectorAll("[data-template]");
+
+        function readVars() {
+          const vars = {};
+          inputs.forEach((i) => {
+            vars[i.dataset.var] = i.value;
+          });
+          return vars;
+        }
+
+        function decode(html) {
+          const t = document.createElement("textarea");
+          t.innerHTML = html;
+          return t.value;
+        }
+
+        function render() {
+          const vars = readVars();
+          templated.forEach((el) => {
+            const tpl = decode(el.getAttribute("data-template"));
+            const out = tpl.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+              Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "{{" + key + "}}"
+            );
+            el.textContent = out;
+          });
+        }
+
+        inputs.forEach((i) => i.addEventListener("input", render));
+
+        document.querySelectorAll(".copy").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const block = btn.closest(".block");
+            const code = block ? block.querySelector("pre > code") : null;
+            const text = code ? code.textContent : "";
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch (e) {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              try { document.execCommand("copy"); } catch (_) {}
+              document.body.removeChild(ta);
+            }
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("copied");
+            }, 1200);
+          });
+        });
+
+        document.getElementById("reset-btn").addEventListener("click", () => {
+          inputs.forEach((i) => {
+            i.value = DEFAULTS[i.dataset.var] ?? "";
+          });
+          render();
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

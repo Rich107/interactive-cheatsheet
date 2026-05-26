@@ -1,0 +1,1099 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>git rescue — undo & recover</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-2: #1c2230;
+        --border: #262d3b;
+        --text: #e6e8ee;
+        --muted: #8b94a7;
+        --accent: #7aa2ff;
+        --accent-2: #9ae6b4;
+        --code-bg: #0b0d12;
+        --code-fg: #e6e8ee;
+        --btn: #2a3142;
+        --btn-hover: #38415a;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        line-height: 1.55;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 24px 80px;
+      }
+      h1 { font-size: 28px; margin: 0 0 6px; }
+      h2 { font-size: 20px; margin: 36px 0 10px; color: var(--accent); }
+      p, li { color: var(--text); }
+      .subtitle { color: var(--muted); margin: 0 0 24px; }
+      .vars {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 18px 8px;
+        position: sticky;
+        top: 12px;
+        z-index: 5;
+        box-shadow: var(--shadow);
+      }
+      .vars h2 { margin: 0 0 12px; font-size: 16px; color: var(--accent-2); }
+      .vars-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 14px;
+      }
+      .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+      .field label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .field input {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 120ms ease;
+      }
+      .field input:focus { border-color: var(--accent); }
+      .reset {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        margin-top: 6px;
+      }
+      .reset:hover { color: var(--text); border-color: var(--accent); }
+
+      .block {
+        position: relative;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin: 10px 0 18px;
+        overflow: hidden;
+      }
+      .block .lang {
+        position: absolute;
+        top: 8px;
+        left: 12px;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .block pre {
+        margin: 0;
+        padding: 30px 14px 14px;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: var(--code-fg);
+        white-space: pre;
+      }
+      .copy {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: var(--btn);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .copy:hover { background: var(--btn-hover); }
+      .copy.copied { background: #234e3c; color: #c6f6d5; border-color: #2f6b50; }
+
+      .explain {
+        border-top: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .explain > summary {
+        cursor: pointer;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        list-style: none;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: color 120ms ease;
+      }
+      .explain > summary::-webkit-details-marker { display: none; }
+      .explain > summary::before {
+        content: "▸";
+        font-size: 9px;
+        transition: transform 120ms ease;
+        display: inline-block;
+      }
+      .explain[open] > summary::before { transform: rotate(90deg); }
+      .explain > summary:hover { color: var(--text); }
+      .explain-body {
+        padding: 4px 14px 14px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text);
+      }
+      .explain-body h4 {
+        margin: 14px 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+      .explain-body p { margin: 4px 0 8px; }
+      .explain-body dl.flags {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(160px, max-content) 1fr;
+        gap: 4px 14px;
+      }
+      .explain-body dl.flags dt {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .explain-body dl.flags dt code {
+        background: transparent;
+        color: var(--accent);
+        padding: 0;
+        border: none;
+      }
+      .explain-body dl.flags dd { margin: 0; color: var(--text); }
+      .explain-body code.tmpl {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent-2);
+      }
+      .explain-body .danger {
+        background: rgba(255, 90, 90, 0.08);
+        border-left: 3px solid #ff6b6b;
+        padding: 6px 10px;
+        margin: 8px 0;
+        color: #ffd0d0;
+        border-radius: 4px;
+      }
+
+      hr.sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+      code.inline {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>git rescue — undo & recover</h1>
+    <p class="subtitle">
+      Surgical recovery commands for when something goes wrong. Change the variables below — every
+      snippet updates live. Click <strong>Explain</strong> under any command to see what each flag
+      does. Flag text captured from <code class="inline">git &lt;subcmd&gt; -h</code> on git 2.50.1.
+    </p>
+
+    <section class="vars" aria-label="Variables">
+      <h2>Variables</h2>
+      <div class="vars-grid">
+        <div class="field">
+          <label for="commit_sha">commit sha</label>
+          <input id="commit_sha" data-var="commit_sha" value="a1b2c3d" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="branch">branch</label>
+          <input id="branch" data-var="branch" value="feature/my-branch" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="base_branch">base branch</label>
+          <input id="base_branch" data-var="base_branch" value="main" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="file_path">file path</label>
+          <input id="file_path" data-var="file_path" value="src/app.ts" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="remote">remote</label>
+          <input id="remote" data-var="remote" value="origin" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="num_commits">num commits</label>
+          <input id="num_commits" data-var="num_commits" value="1" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="stash_msg">stash message</label>
+          <input id="stash_msg" data-var="stash_msg" value="wip: experimenting" autocomplete="off" />
+        </div>
+      </div>
+      <button class="reset" id="reset-btn" type="button">Reset to defaults</button>
+    </section>
+
+    <h2>1. Inspect history and the reflog</h2>
+    <p>See the topology of every branch in one view — the fastest way to orient yourself before any
+      rescue. Combine commit graph, all refs, and ref decorations:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git log --oneline --graph --all --decorate -n 30"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Prints the last 30 commits across every ref as a single ASCII graph, one line per
+            commit, with branch/tag labels in the right column. Use this before any reset/rebase
+            to confirm where you actually are.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--oneline</code></dt><dd>Shorthand for <code>--pretty=oneline --abbrev-commit</code>. One commit per line.</dd>
+            <dt><code>--graph</code></dt><dd>Draw an ASCII graph showing branch/merge topology to the left of the log.</dd>
+            <dt><code>--all</code></dt><dd>Show commits reachable from any ref under <code>refs/</code>, not just <code>HEAD</code>.</dd>
+            <dt><code>--decorate</code></dt><dd>Show ref names (branches, tags) next to commits.</dd>
+            <dt><code>-n N</code></dt><dd>Limit the number of commits to output.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--source</code></dt><dd>Annotate each commit with the ref it was reached through.</dd>
+            <dt><code>-L &lt;start&gt;,&lt;end&gt;:&lt;file&gt;</code></dt><dd>Trace the evolution of a specific line range (or function) in a file.</dd>
+            <dt><code>--author=PATTERN</code></dt><dd>Filter by author. Useful for "who broke this?" sweeps.</dd>
+            <dt><code>--since=DATE</code></dt><dd>Limit to commits newer than a relative or absolute date (e.g. <code>--since=2.weeks</code>).</dd>
+            <dt><code>-S "string"</code></dt><dd>Pickaxe — only commits that add/remove the literal string. Great for finding when a bug was introduced.</dd>
+            <dt><code>--first-parent</code></dt><dd>Follow only the first parent on merges — gives a linear view of mainline history.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>The reflog records every move <code class="inline">HEAD</code> has ever made locally —
+      including commits that are no longer reachable from any branch. This is the safety net behind
+      almost every rescue below:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git reflog --date=iso -n 30"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Shows the last 30 entries in <code>HEAD</code>'s reflog with ISO timestamps. Each line
+            is a recoverable point — even after a destructive <code>reset</code> or a botched
+            rebase. Entries expire after ~90 days by default (<code>gc.reflogExpire</code>).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>show</code></dt><dd>Subcommand (implied if omitted) — list reflog entries.</dd>
+            <dt><code>--date=iso</code></dt><dd>Format timestamps as ISO 8601 instead of relative ("2 hours ago").</dd>
+            <dt><code>-n N</code></dt><dd>Limit number of entries shown.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>git reflog &lt;ref&gt;</code></dt><dd>Show the reflog for a named ref (e.g. <code>git reflog feature/my-branch</code>) instead of <code>HEAD</code>.</dd>
+            <dt><code>--all</code></dt><dd>Reflog for every ref. Useful when looking for "where did that branch tip go?"</dd>
+            <dt><code>--relative-date</code></dt><dd>Display "2 hours ago"-style dates (the default).</dd>
+            <dt><code>git reflog expire</code></dt><dd>Manually expire old entries — needed only when you actually want them gone.</dd>
+            <dt><code>git reflog delete &lt;ref&gt;@{N}</code></dt><dd>Remove a single reflog entry.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>2. Undo unstaged changes to a file</h2>
+    <p>Modern syntax (git ≥ 2.23). Discards local edits and restores the index version:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git restore {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Resets <code class="tmpl" data-template="{{file_path}}"></code> in the working tree to
+            match the index. With no <code>--source</code> the index is the source; the on-disk
+            edits you've made since the last <code>git add</code> are thrown away.</p>
+          <div class="danger">Working-tree edits are lost without warning. Run
+            <code>git diff {{file_path}}</code> first if you might still want them.</div>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>&lt;file&gt;</code></dt><dd>Pathspec of the file(s) to restore.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-s, --source=&lt;tree-ish&gt;</code></dt><dd>Restore from a specific commit/tag/branch instead of the index.</dd>
+            <dt><code>-S, --staged</code></dt><dd>Restore the index (not the working tree) — used to unstage. See step 3.</dd>
+            <dt><code>-W, --worktree</code></dt><dd>Restore the working tree. Default if neither <code>-S</code> nor <code>-W</code> is given.</dd>
+            <dt><code>-p, --patch</code></dt><dd>Interactively pick which hunks to discard.</dd>
+            <dt><code>-m, --merge</code></dt><dd>Three-way merge on restore — useful when recovering during a conflict.</dd>
+            <dt><code>--ours</code> / <code>--theirs</code></dt><dd>For unmerged files, pick one side.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Older equivalent — still works everywhere and shows up in a lot of existing tutorials:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git checkout -- {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Same effect as <code>git restore {{file_path}}</code>. The <code>--</code> separates
+            the file pathspec from any branch name, so <code>git checkout</code> won't
+            mis-interpret a file called <code>main</code> as the <code>main</code> branch.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--</code></dt><dd>End-of-options sentinel — everything after is a pathspec, not a branch.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-p, --patch</code></dt><dd>Interactively choose hunks to discard.</dd>
+            <dt><code>-f, --force</code></dt><dd>Force checkout — throw away local modifications without warning.</dd>
+            <dt><code>-m, --merge</code></dt><dd>Three-way merge with the target version.</dd>
+            <dt><code>--ours</code> / <code>--theirs</code></dt><dd>Pick a side for an unmerged file.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Restore the file from a specific commit instead of the index — handy for grabbing back a
+      version you deleted three commits ago:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git restore --source={{commit_sha}} {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Writes the version of <code class="tmpl" data-template="{{file_path}}"></code> as it
+            existed at commit <code class="tmpl" data-template="{{commit_sha}}"></code> into your
+            working tree. The index is untouched, so you can review the diff before staging.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-s, --source=&lt;tree-ish&gt;</code></dt><dd>Tree-ish (commit, tag, branch) to restore the file from.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--staged --source=&lt;rev&gt;</code></dt><dd>Drop a version straight into the index without touching the working tree.</dd>
+            <dt><code>--worktree --staged</code></dt><dd>Combine to restore both index and working tree simultaneously.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>3. Unstage a file (keep the edits)</h2>
+    <p>Modern syntax:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git restore --staged {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Removes <code class="tmpl" data-template="{{file_path}}"></code> from the index but
+            leaves your working-tree edits intact. The file shows up as "modified, not staged" in
+            <code>git status</code> afterward.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-S, --staged</code></dt><dd>Operate on the index (instead of the working tree).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--source=&lt;rev&gt;</code></dt><dd>Pair with <code>--staged</code> to load a different version into the index.</dd>
+            <dt><code>-p, --patch</code></dt><dd>Unstage selected hunks interactively.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Older equivalent:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git reset HEAD {{file_path}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Path-form of <code>git reset</code>: resets the index entry for
+            <code class="tmpl" data-template="{{file_path}}"></code> back to its
+            <code>HEAD</code> version. Working tree is untouched.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>HEAD</code></dt><dd>Tree-ish to reset to. Defaults to <code>HEAD</code>, so <code>git reset {{file_path}}</code> works too.</dd>
+            <dt><code>&lt;pathspec&gt;</code></dt><dd>Files to reset.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-p, --patch</code></dt><dd>Unstage selected hunks interactively.</dd>
+            <dt><code>-q, --quiet</code></dt><dd>Only report errors.</dd>
+            <dt><code>-N, --intent-to-add</code></dt><dd>Record only that the path will be added later.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>4. Amend the last commit</h2>
+    <p>Edit the message and/or fold currently-staged changes into the previous commit:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git commit --amend"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Replaces the tip of the current branch with a new commit whose tree is the index and
+            whose parent is the previous commit's parent. Opens your editor for the message. Any
+            currently-staged changes are included in the amended commit.</p>
+          <div class="danger">Amending rewrites the commit SHA. If the commit has already been
+            pushed and others may have fetched it, prefer a new commit or
+            <code>git revert</code> — otherwise teammates will need to reset their copies.</div>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--amend</code></dt><dd>Amend the previous commit instead of creating a new one.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--no-edit</code></dt><dd>Keep the existing commit message — see the next snippet.</dd>
+            <dt><code>-m "msg"</code></dt><dd>Provide a new message inline.</dd>
+            <dt><code>--reset-author</code></dt><dd>Reset author info to current user/time (useful after editor or rebase).</dd>
+            <dt><code>--author="Name &lt;email&gt;"</code></dt><dd>Override author for the amended commit.</dd>
+            <dt><code>-S, --gpg-sign</code></dt><dd>GPG-sign the rewritten commit.</dd>
+            <dt><code>-a, --all</code></dt><dd>Auto-stage all modified tracked files before amending.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Quietly fold staged changes into the previous commit, keeping the existing message — the
+      classic "oops, forgot to add that file" pattern:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git commit --amend --no-edit"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Same as above but skips the editor and reuses the previous message verbatim. SHA still
+            changes; same warning about pushed commits applies.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--amend</code></dt><dd>Replace the previous commit.</dd>
+            <dt><code>--no-edit</code></dt><dd>Reuse the previous message without opening an editor.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--allow-empty</code></dt><dd>Permit an amend that produces an identical tree (no-op commits).</dd>
+            <dt><code>--fixup=&lt;sha&gt;</code></dt><dd>Create a fixup commit aimed at an older SHA — pair with <code>git rebase --autosquash</code>.</dd>
+            <dt><code>--squash=&lt;sha&gt;</code></dt><dd>Like <code>--fixup</code> but lets you edit the squashed message.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>5. Undo the last commit but keep changes</h2>
+    <p>Keep the changes <strong>staged</strong> (ready to re-commit with a fixed message):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git reset --soft HEAD~{{num_commits}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Moves the branch tip back by <code class="tmpl" data-template="{{num_commits}}"></code>
+            commit(s) but leaves the index and working tree exactly as they were. The diff that
+            was in the undone commit is now staged, ready for a new <code>git commit</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--soft</code></dt><dd>Reset only <code>HEAD</code>. Index and working tree are untouched.</dd>
+            <dt><code>HEAD~N</code></dt><dd>The commit N steps before <code>HEAD</code> on the first-parent line.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--mixed</code></dt><dd>Default. Resets <code>HEAD</code> and index, keeps working tree.</dd>
+            <dt><code>--keep</code></dt><dd>Like <code>--hard</code> but aborts if the reset would discard local changes.</dd>
+            <dt><code>--merge</code></dt><dd>Like <code>--hard</code> on clean paths, but preserves uncommitted edits if they don't conflict with the target.</dd>
+            <dt><code>-q, --quiet</code></dt><dd>Suppress output.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Keep the changes in your working tree but <strong>unstage</strong> them:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git reset --mixed HEAD~{{num_commits}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Same as <code>--soft</code> but also resets the index, so the recovered changes show
+            up as "not staged for commit". This is the default mode if no flag is given.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--mixed</code></dt><dd>Reset <code>HEAD</code> and the index, but keep the working tree.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--no-refresh</code></dt><dd>Skip refreshing the index after reset — faster on huge repos.</dd>
+            <dt><code>-N, --intent-to-add</code></dt><dd>Record only that removed paths will be added later.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>6. Discard the last commit entirely</h2>
+    <p>Throws away the commit AND any uncommitted edits — destructive, no second prompt:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git reset --hard HEAD~{{num_commits}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <div class="danger"><strong>Destructive.</strong> Working-tree edits, staged edits, AND
+            the commit are all gone. If you regret it, the discarded commit is still in your
+            reflog for ~90 days — see step 7 to recover.</div>
+          <p>Resets <code>HEAD</code>, index, and working tree to
+            <code class="tmpl" data-template="HEAD~{{num_commits}}"></code>. Commits are not
+            immediately deleted from the object store, but they become unreachable and will be
+            garbage-collected after <code>gc.pruneExpire</code> (default 2 weeks) unless something
+            else references them.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--hard</code></dt><dd>Reset <code>HEAD</code>, index, AND working tree to the target. Discards uncommitted changes.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--keep</code></dt><dd>Safer — aborts the reset if any local changes would be lost.</dd>
+            <dt><code>--merge</code></dt><dd>Resets the index and matching working-tree files, but keeps changes that don't overlap.</dd>
+            <dt><code>--quiet</code></dt><dd>Suppress output.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>7. Recover a "lost" commit via reflog</h2>
+    <p>Find the SHA you want back:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git reflog --date=iso -n 30"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Lists the last 30 reflog entries with ISO timestamps. Look for the entry just before
+            the destructive command — that's the SHA you want.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--date=iso</code></dt><dd>ISO 8601 timestamps instead of relative.</dd>
+            <dt><code>-n N</code></dt><dd>Limit number of entries.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Inspect a candidate commit without committing to it (puts you in detached HEAD — safe to
+      look around, no branch is moved):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git checkout {{commit_sha}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Moves <code>HEAD</code> to <code class="tmpl" data-template="{{commit_sha}}"></code>
+            and detaches it (no branch points there). You can <code>git log</code>,
+            <code>git diff</code>, and run tests; nothing changes on disk for the branch you were
+            on. If the commit looks right, pin it to a new branch with the next snippet.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>&lt;commit&gt;</code></dt><dd>The SHA, tag, or branch to check out.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-b &lt;branch&gt;</code></dt><dd>Create AND check out a new branch at the commit — combined form of the next step.</dd>
+            <dt><code>-d, --detach</code></dt><dd>Explicitly detach (suppresses the "detached HEAD" warning).</dd>
+            <dt><code>-f, --force</code></dt><dd>Throw away local modifications.</dd>
+            <dt><code>-m, --merge</code></dt><dd>Three-way merge between the current state and the target.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Pin the recovered commit onto a fresh branch so it's safe from garbage collection:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git branch recovery {{commit_sha}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Creates a new branch called <code>recovery</code> pointing at
+            <code class="tmpl" data-template="{{commit_sha}}"></code>. You don't need to check it
+            out — just having a ref keeps the commit reachable forever (no GC).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>&lt;branch-name&gt;</code></dt><dd>Name of the new branch.</dd>
+            <dt><code>&lt;start-point&gt;</code></dt><dd>Commit/SHA the branch will point at.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-f, --force</code></dt><dd>Reset an existing branch to the new start point.</dd>
+            <dt><code>-d, --delete</code></dt><dd>Delete a branch (must be merged — otherwise <code>-D</code>).</dd>
+            <dt><code>-m, --move</code></dt><dd>Rename a branch and its reflog.</dd>
+            <dt><code>--show-current</code></dt><dd>Print the current branch name (handy in scripts).</dd>
+            <dt><code>-a, --all</code></dt><dd>List local + remote-tracking branches.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>8. Cherry-pick a commit onto the current branch</h2>
+    <p>Apply a single commit from anywhere in the repo to the tip of your current branch:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git cherry-pick {{commit_sha}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Re-applies the diff of <code class="tmpl" data-template="{{commit_sha}}"></code> on
+            top of your current branch and creates a new commit (new SHA, same message + author).
+            On conflict, fix the files and run
+            <code>git cherry-pick --continue</code> — or <code>--abort</code> to bail out.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>&lt;commit&gt;</code></dt><dd>SHA or ref to cherry-pick. Accepts a range, e.g. <code>A..B</code>.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-n, --no-commit</code></dt><dd>Apply the change but don't auto-commit — lets you tweak first.</dd>
+            <dt><code>-x</code></dt><dd>Append "(cherry picked from commit …)" to the message — useful audit trail.</dd>
+            <dt><code>-e, --edit</code></dt><dd>Open the editor to tweak the commit message.</dd>
+            <dt><code>-m &lt;parent&gt;</code></dt><dd>Cherry-picking a merge commit — pick which parent to treat as mainline.</dd>
+            <dt><code>-s, --signoff</code></dt><dd>Add a <code>Signed-off-by</code> trailer.</dd>
+            <dt><code>--continue</code> / <code>--abort</code> / <code>--skip</code></dt><dd>Resolve, cancel, or skip the in-progress cherry-pick.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Cherry-pick without auto-committing — useful when you want to amend the change or combine
+      multiple picks into one commit:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git cherry-pick --no-commit {{commit_sha}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Stages the diff in your index and working tree, but doesn't record a commit. Useful
+            for "I want this change but in a different commit story".</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-n, --no-commit</code></dt><dd>Apply the change without committing.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>9. Revert a public commit safely</h2>
+    <p>Creates a NEW commit that undoes the named one — preferred for shared history because it
+      doesn't rewrite anything:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git revert {{commit_sha}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Computes the inverse diff of <code class="tmpl" data-template="{{commit_sha}}"></code>
+            and commits it on top. Safe to push — no rewrite, no force, your colleagues won't
+            notice anything weird.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>&lt;commit&gt;</code></dt><dd>Commit to invert. Accepts a list — multiple reverts are applied in order.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-n, --no-commit</code></dt><dd>Stage the inverse changes without committing.</dd>
+            <dt><code>-e, --edit</code></dt><dd>Edit the auto-generated revert message.</dd>
+            <dt><code>-m &lt;parent&gt;</code></dt><dd>For merge commits — specify which parent to treat as mainline. <strong>Required</strong> when reverting a merge.</dd>
+            <dt><code>--no-edit</code></dt><dd>Use the auto-generated message without opening the editor.</dd>
+            <dt><code>-s, --signoff</code></dt><dd>Add a <code>Signed-off-by</code> trailer.</dd>
+            <dt><code>--continue</code> / <code>--abort</code> / <code>--skip</code></dt><dd>Resolve or bail out of an in-progress revert.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Revert a merge commit (the <code class="inline">-m 1</code> says "keep the first parent's
+      line of history as the mainline"):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git revert -m 1 {{commit_sha}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>For merge commits, git needs to know which parent represents "the branch you want to
+            keep". <code>-m 1</code> picks the first parent (usually the target branch you merged
+            into). The diff of the second parent (the merged-in feature) gets inverted.</p>
+          <div class="danger">Reverting a merge makes future re-merges of the same branch
+            <em>not</em> re-introduce the changes. To re-land later, revert the revert, or rebase
+            the feature branch fresh on top.</div>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-m N</code></dt><dd>Select the Nth parent of a merge commit as the mainline.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>10. Bisect to find a regression</h2>
+    <p>Start the search, marking the current commit as <em>bad</em> and a known-good earlier
+      commit:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git bisect start
+git bisect bad
+git bisect good {{commit_sha}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Initiates a binary search between
+            <code class="tmpl" data-template="{{commit_sha}}"></code> (good) and the current
+            commit (bad). Git checks out a midpoint commit; you test, then run
+            <code>git bisect good</code> or <code>git bisect bad</code> and it picks the next one.
+            Usually 5–10 iterations to isolate the breaker even across thousands of commits.</p>
+          <h4>Subcommands used</h4>
+          <dl class="flags">
+            <dt><code>bisect start</code></dt><dd>Begin a bisect session. Optionally takes <code>&lt;bad&gt; &lt;good&gt;...</code> inline.</dd>
+            <dt><code>bisect bad</code></dt><dd>Mark the current checkout as broken.</dd>
+            <dt><code>bisect good &lt;rev&gt;</code></dt><dd>Mark a revision as working.</dd>
+          </dl>
+          <h4>Other subcommands you might want</h4>
+          <dl class="flags">
+            <dt><code>bisect skip</code></dt><dd>Can't test this commit (broken build, missing dep) — git picks a neighbour.</dd>
+            <dt><code>bisect run &lt;cmd&gt;</code></dt><dd>Automate the search with a script that exits 0 (good) / non-zero (bad).</dd>
+            <dt><code>bisect terms</code></dt><dd>Show or rename the good/bad terms (e.g. fast/slow for performance bisects).</dd>
+            <dt><code>bisect log</code> / <code>bisect replay</code></dt><dd>Save and replay a bisect session.</dd>
+            <dt><code>bisect visualize</code></dt><dd>Open <code>gitk</code> showing the remaining suspect range.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Once isolated, end the bisect and return to where you were:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git bisect reset"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Cleans up bisect state and returns to the branch you were on before
+            <code>git bisect start</code>.</p>
+          <h4>Subcommand used</h4>
+          <dl class="flags">
+            <dt><code>bisect reset [&lt;commit&gt;]</code></dt><dd>End the bisect session. Optional commit argument checks out that commit instead of the original.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Automate the search — git runs the script at each midpoint and uses the exit code:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git bisect run ./scripts/repro.sh"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>At each step, runs the script. Exit code <code>0</code> = good, <code>1–124, 126, 127</code>
+            = bad, <code>125</code> = skip (test failed for unrelated reasons). Walk away and come
+            back to the offending SHA. Most useful for failing unit tests or compile errors.</p>
+        </div>
+      </details>
+    </div>
+
+    <h2>11. Stash work in progress</h2>
+    <p>Stash all tracked changes (modified + staged) with a descriptive label so you can find it
+      later:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git stash push -m &quot;{{stash_msg}}&quot;"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Saves modified + staged tracked files to the stash and resets the working tree to a
+            clean state matching <code>HEAD</code>. Stashes are stored in
+            <code>refs/stash</code> with a stack-like reflog (<code>stash@{0}</code> is the
+            newest).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>push</code></dt><dd>Subcommand. The default if you type bare <code>git stash</code>.</dd>
+            <dt><code>-m, --message &lt;msg&gt;</code></dt><dd>Attach a description to the stash entry — visible in <code>git stash list</code>.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-u, --include-untracked</code></dt><dd>Also stash files that aren't yet tracked (but ignore <code>.gitignore</code>'d ones).</dd>
+            <dt><code>-a, --all</code></dt><dd>Stash everything, including ignored files.</dd>
+            <dt><code>-k, --keep-index</code></dt><dd>Leave staged changes in the index — useful when you want to test just the staged subset.</dd>
+            <dt><code>-S, --staged</code></dt><dd>Stash only the staged changes.</dd>
+            <dt><code>-p, --patch</code></dt><dd>Interactively pick hunks to stash.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Stash including untracked files (e.g. new files you haven't added yet):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git stash push -u -m &quot;{{stash_msg}}&quot;"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Without <code>-u</code>, brand-new untracked files are left in place — which can
+            surprise you when you switch branches afterwards. Use <code>-u</code> whenever the WIP
+            includes files you haven't <code>git add</code>-ed yet.</p>
+        </div>
+      </details>
+    </div>
+
+    <p>List, peek, and reapply:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git stash list
+git stash show -p stash@{0}
+git stash pop"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p><code>list</code> shows the stash stack with messages. <code>show -p</code> prints the
+            full diff of an entry so you can verify before applying. <code>pop</code> applies the
+            top entry and removes it from the stack — if it conflicts, the entry is kept and you
+            resolve manually.</p>
+          <h4>Subcommands used</h4>
+          <dl class="flags">
+            <dt><code>stash list</code></dt><dd>Show every entry in the stash stack.</dd>
+            <dt><code>stash show [-p] [&lt;stash&gt;]</code></dt><dd>Show a summary or full diff of a stash. Defaults to <code>stash@{0}</code>.</dd>
+            <dt><code>stash pop [&lt;stash&gt;]</code></dt><dd>Apply and remove the entry. Default: top of stack.</dd>
+          </dl>
+          <h4>Other subcommands you might want</h4>
+          <dl class="flags">
+            <dt><code>stash drop &lt;stash&gt;</code></dt><dd>Remove a specific entry without applying it.</dd>
+            <dt><code>stash clear</code></dt><dd>Delete the entire stash stack. No undo.</dd>
+            <dt><code>stash branch &lt;name&gt; [&lt;stash&gt;]</code></dt><dd>Create a branch at the parent of the stash, then apply + drop it. Best recovery when <code>pop</code> conflicts.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Apply without removing from the stash list — useful when you want to apply the same WIP to
+      multiple branches:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git stash apply stash@{0}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Like <code>pop</code> but keeps the entry on the stack. Drop it manually with
+            <code>git stash drop stash@{0}</code> when you're done.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>&lt;stash&gt;</code></dt><dd>Reference to apply. Defaults to <code>stash@{0}</code>.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--index</code></dt><dd>Also restore the index state (preserves what was staged vs unstaged).</dd>
+            <dt><code>-q, --quiet</code></dt><dd>Suppress feedback messages.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>12. Recover from a force-push you regret</h2>
+    <p>On the machine that did the force-push, the previous tip is still in your local reflog.
+      Find it:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git reflog --date=iso -n 30"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Look for the entry just before the force-push (often labelled
+            <code>reset:</code> or <code>rebase finished:</code>). That's the SHA you want to
+            restore as the branch tip.</p>
+          <p>If your local reflog has already been clobbered, ask a teammate who fetched recently
+            — their <code class="tmpl" data-template="refs/remotes/{{remote}}/{{branch}}"></code>
+            reflog likely still holds the old SHA.</p>
+        </div>
+      </details>
+    </div>
+
+    <p>Point the local branch back at the pre-force-push SHA:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git checkout {{branch}}
+git reset --hard {{commit_sha}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Switches to <code class="tmpl" data-template="{{branch}}"></code> and resets it to the
+            recovered SHA. Same destructive caveats as step 6, but here you're using
+            <code>--hard</code> deliberately to discard the broken state.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--hard</code></dt><dd>Reset HEAD, index, and working tree to the target commit.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Push it back with <code class="inline">--force-with-lease</code> — safer than
+      <code class="inline">--force</code> because it aborts if someone else has since pushed:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="git push --force-with-lease {{remote}} {{branch}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <div class="danger">Force-push of any kind rewrites remote history. Coordinate with
+            anyone who has branched off
+            <code class="tmpl" data-template="{{branch}}"></code> — they'll need to
+            <code>git fetch</code> + <code>git reset --hard {{remote}}/{{branch}}</code> on their
+            side. Never force-push to <code class="tmpl" data-template="{{base_branch}}"></code>
+            or other shared base branches.</div>
+          <p>Overwrites
+            <code class="tmpl" data-template="{{remote}}/{{branch}}"></code> with your local
+            <code class="tmpl" data-template="{{branch}}"></code>. The
+            <code>--force-with-lease</code> form checks that the remote ref is still at the SHA
+            git last saw — if someone else has pushed in the meantime, the push aborts instead of
+            clobbering their work.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--force-with-lease[=&lt;refname&gt;:&lt;expect&gt;]</code></dt><dd>Require old value of ref to match — aborts if the remote has moved since your last fetch.</dd>
+            <dt><code>&lt;remote&gt;</code></dt><dd>The remote to push to (<code>origin</code> by default).</dd>
+            <dt><code>&lt;refspec&gt;</code></dt><dd>Branch to push.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-f, --force</code></dt><dd>Blunt force — no lease check. Easier to clobber colleagues' work. Avoid.</dd>
+            <dt><code>--force-if-includes</code></dt><dd>Tighter safety than <code>--force-with-lease</code> — also requires your local has integrated the latest remote updates.</dd>
+            <dt><code>-n, --dry-run</code></dt><dd>Show what would happen without actually pushing.</dd>
+            <dt><code>-u, --set-upstream</code></dt><dd>Set upstream tracking for the branch.</dd>
+            <dt><code>--no-verify</code></dt><dd>Bypass pre-push hooks. Use sparingly.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <script>
+      (function () {
+        const DEFAULTS = {
+          commit_sha: "a1b2c3d",
+          branch: "feature/my-branch",
+          base_branch: "main",
+          file_path: "src/app.ts",
+          remote: "origin",
+          num_commits: "1",
+          stash_msg: "wip: experimenting"
+        };
+
+        const inputs = document.querySelectorAll("input[data-var]");
+        const templated = document.querySelectorAll("[data-template]");
+
+        function readVars() {
+          const vars = {};
+          inputs.forEach((i) => {
+            vars[i.dataset.var] = i.value;
+          });
+          return vars;
+        }
+
+        function decode(html) {
+          const t = document.createElement("textarea");
+          t.innerHTML = html;
+          return t.value;
+        }
+
+        function render() {
+          const vars = readVars();
+          templated.forEach((el) => {
+            const tpl = decode(el.getAttribute("data-template"));
+            const out = tpl.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+              Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "{{" + key + "}}"
+            );
+            el.textContent = out;
+          });
+        }
+
+        inputs.forEach((i) => i.addEventListener("input", render));
+
+        document.querySelectorAll(".copy").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const block = btn.closest(".block");
+            const code = block ? block.querySelector("pre > code") : null;
+            const text = code ? code.textContent : "";
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch (e) {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              try { document.execCommand("copy"); } catch (_) {}
+              document.body.removeChild(ta);
+            }
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("copied");
+            }, 1200);
+          });
+        });
+
+        document.getElementById("reset-btn").addEventListener("click", () => {
+          inputs.forEach((i) => {
+            i.value = DEFAULTS[i.dataset.var] ?? "";
+          });
+          render();
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

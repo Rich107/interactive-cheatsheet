@@ -1,0 +1,1093 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>docker daily-driver</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-2: #1c2230;
+        --border: #262d3b;
+        --text: #e6e8ee;
+        --muted: #8b94a7;
+        --accent: #7aa2ff;
+        --accent-2: #9ae6b4;
+        --code-bg: #0b0d12;
+        --code-fg: #e6e8ee;
+        --btn: #2a3142;
+        --btn-hover: #38415a;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        line-height: 1.55;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 24px 80px;
+      }
+      h1 { font-size: 28px; margin: 0 0 6px; }
+      h2 { font-size: 20px; margin: 36px 0 10px; color: var(--accent); }
+      p, li { color: var(--text); }
+      .subtitle { color: var(--muted); margin: 0 0 24px; }
+      .vars {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 18px 8px;
+        position: sticky;
+        top: 12px;
+        z-index: 5;
+        box-shadow: var(--shadow);
+      }
+      .vars h2 { margin: 0 0 12px; font-size: 16px; color: var(--accent-2); }
+      .vars-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 14px;
+      }
+      .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+      .field label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .field input {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 120ms ease;
+      }
+      .field input:focus { border-color: var(--accent); }
+      .reset {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        margin-top: 6px;
+      }
+      .reset:hover { color: var(--text); border-color: var(--accent); }
+
+      .block {
+        position: relative;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin: 10px 0 18px;
+        overflow: hidden;
+      }
+      .block .lang {
+        position: absolute;
+        top: 8px;
+        left: 12px;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .block pre {
+        margin: 0;
+        padding: 30px 14px 14px;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: var(--code-fg);
+        white-space: pre;
+      }
+      .copy {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: var(--btn);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .copy:hover { background: var(--btn-hover); }
+      .copy.copied { background: #234e3c; color: #c6f6d5; border-color: #2f6b50; }
+
+      .explain {
+        border-top: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .explain > summary {
+        cursor: pointer;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        list-style: none;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: color 120ms ease;
+      }
+      .explain > summary::-webkit-details-marker { display: none; }
+      .explain > summary::before {
+        content: "▸";
+        font-size: 9px;
+        transition: transform 120ms ease;
+        display: inline-block;
+      }
+      .explain[open] > summary::before { transform: rotate(90deg); }
+      .explain > summary:hover { color: var(--text); }
+      .explain-body {
+        padding: 4px 14px 14px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text);
+      }
+      .explain-body h4 {
+        margin: 14px 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+      .explain-body p { margin: 4px 0 8px; }
+      .explain-body dl.flags {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(160px, max-content) 1fr;
+        gap: 4px 14px;
+      }
+      .explain-body dl.flags dt {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .explain-body dl.flags dt code {
+        background: transparent;
+        color: var(--accent);
+        padding: 0;
+        border: none;
+      }
+      .explain-body dl.flags dd { margin: 0; color: var(--text); }
+      .explain-body code.tmpl {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent-2);
+      }
+
+      hr.sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+      code.inline {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>docker daily-driver</h1>
+    <p class="subtitle">
+      The Docker CLI commands you'll actually reach for on a working day — build, run, inspect, log,
+      clean up. Change the variables below and every snippet updates live. Click
+      <strong>Explain</strong> under any command for what each flag does, plus other flags worth knowing.
+    </p>
+
+    <section class="vars" aria-label="Variables">
+      <h2>Variables</h2>
+      <div class="vars-grid">
+        <div class="field">
+          <label for="image">image</label>
+          <input id="image" data-var="image" value="nginx" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="tag">tag</label>
+          <input id="tag" data-var="tag" value="alpine" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="container_name">container name</label>
+          <input id="container_name" data-var="container_name" value="my-app" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="port_host">host port</label>
+          <input id="port_host" data-var="port_host" value="8080" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="port_container">container port</label>
+          <input id="port_container" data-var="port_container" value="80" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="volume_host">host volume path</label>
+          <input id="volume_host" data-var="volume_host" value="./data" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="volume_container">container mount path</label>
+          <input id="volume_container" data-var="volume_container" value="/data" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="network">network</label>
+          <input id="network" data-var="network" value="app-net" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="dockerfile">dockerfile</label>
+          <input id="dockerfile" data-var="dockerfile" value="Dockerfile" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="build_context">build context</label>
+          <input id="build_context" data-var="build_context" value="." autocomplete="off" />
+        </div>
+      </div>
+      <button class="reset" id="reset-btn" type="button">Reset to defaults</button>
+    </section>
+
+    <h2>1. Build images</h2>
+    <p>Build a tagged image from a Dockerfile. The final positional argument is the build context — the
+      directory whose contents are sent to the builder and visible to <code class="inline">COPY</code> /
+      <code class="inline">ADD</code> instructions:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker build -t {{image}}:{{tag}} -f {{dockerfile}} {{build_context}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Builds an image from <code class="tmpl" data-template="{{dockerfile}}"></code> using
+            <code class="tmpl" data-template="{{build_context}}"></code> as the build context, and tags
+            the result as <code class="tmpl" data-template="{{image}}:{{tag}}"></code>. On modern Docker
+            this is actually a buildx build under the hood.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-t, --tag stringArray</code></dt><dd>Image identifier in the form <code>[registry/]repository[:tag]</code>. Repeat for multiple tags.</dd>
+            <dt><code>-f, --file string</code></dt><dd>Name of the Dockerfile. Defaults to <code>PATH/Dockerfile</code> if omitted.</dd>
+            <dt><code>PATH | URL | -</code></dt><dd>Build context. A dot means the current directory; a URL points at a Git repo or tarball; <code>-</code> reads a Dockerfile from stdin.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--no-cache</code></dt><dd>Don't use any cached layers — every step re-runs.</dd>
+            <dt><code>--pull</code></dt><dd>Always attempt to pull a newer version of every referenced base image.</dd>
+            <dt><code>--build-arg KEY=VAL</code></dt><dd>Set a build-time variable consumed by <code>ARG</code> in the Dockerfile.</dd>
+            <dt><code>--target STAGE</code></dt><dd>Stop at a specific stage in a multi-stage build.</dd>
+            <dt><code>--platform os/arch</code></dt><dd>Build for a specific target platform, e.g. <code>linux/amd64</code> or <code>linux/arm64</code>.</dd>
+            <dt><code>--secret id=mysecret,src=…</code></dt><dd>Expose a secret to <code>RUN --mount=type=secret</code> steps without baking it into a layer.</dd>
+            <dt><code>--push</code></dt><dd>Shorthand for <code>--output=type=registry</code> — push the built image straight to its registry.</dd>
+            <dt><code>--load</code></dt><dd>Shorthand for <code>--output=type=docker</code> — load the result into the local image store (needed when building with buildx for the local daemon).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Force a full rebuild from scratch and always pull fresh base images — useful when you suspect a
+      stale cached layer:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker build --no-cache --pull -t {{image}}:{{tag}} -f {{dockerfile}} {{build_context}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Same build as above, but discards the build cache and re-pulls every referenced base image
+            before starting. Slower; deterministic.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--no-cache</code></dt><dd>Do not use cache when building the image.</dd>
+            <dt><code>--pull</code></dt><dd>Always attempt to pull all referenced images.</dd>
+            <dt><code>-t, --tag</code></dt><dd>Image identifier.</dd>
+            <dt><code>-f, --file</code></dt><dd>Path to the Dockerfile.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--no-cache-filter STAGE</code></dt><dd>Disable cache for specific stages only — keep cache where it's safe.</dd>
+            <dt><code>--progress=plain</code></dt><dd>Show full step output (default <code>auto</code> truncates aggressively).</dd>
+            <dt><code>-q, --quiet</code></dt><dd>Suppress build output and print only the resulting image ID.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>2. Run containers</h2>
+    <p>The bread-and-butter long-form <code class="inline">docker run</code>: detached, named, with a
+      published port, a bind mount, and an environment variable. <code class="inline">--rm</code> means
+      the container is removed automatically when it stops:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker run -d --rm --name {{container_name}} \
+  -p {{port_host}}:{{port_container}} \
+  -v {{volume_host}}:{{volume_container}} \
+  -e LOG_LEVEL=info \
+  {{image}}:{{tag}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Starts <code class="tmpl" data-template="{{image}}:{{tag}}"></code> in the background as
+            <code class="tmpl" data-template="{{container_name}}"></code>, mapping host port
+            <code class="tmpl" data-template="{{port_host}}"></code> to container port
+            <code class="tmpl" data-template="{{port_container}}"></code>, bind-mounting
+            <code class="tmpl" data-template="{{volume_host}}"></code> to
+            <code class="tmpl" data-template="{{volume_container}}"></code>, and setting
+            <code>LOG_LEVEL=info</code> in the container's environment.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-d, --detach</code></dt><dd>Run the container in the background and print its ID.</dd>
+            <dt><code>--rm</code></dt><dd>Automatically remove the container when it exits.</dd>
+            <dt><code>--name string</code></dt><dd>Assign a name to the container (otherwise Docker generates a random one).</dd>
+            <dt><code>-p, --publish list</code></dt><dd>Publish a container's port to the host: <code>HOST_PORT:CONTAINER_PORT</code>.</dd>
+            <dt><code>-v, --volume list</code></dt><dd>Bind mount a host path or named volume into the container: <code>SOURCE:TARGET[:OPTIONS]</code>.</dd>
+            <dt><code>-e, --env list</code></dt><dd>Set an environment variable inside the container.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--env-file FILE</code></dt><dd>Read a file of <code>KEY=VAL</code> lines instead of repeating <code>-e</code>.</dd>
+            <dt><code>--network NAME</code></dt><dd>Attach to a user-defined network (e.g. for DNS-based service discovery).</dd>
+            <dt><code>--restart=always|unless-stopped|on-failure</code></dt><dd>Set the container's restart policy.</dd>
+            <dt><code>--mount type=volume,src=…,dst=…</code></dt><dd>Newer, more explicit alternative to <code>-v</code>.</dd>
+            <dt><code>-u, --user UID[:GID]</code></dt><dd>Run the process as a specific user/group inside the container.</dd>
+            <dt><code>-w, --workdir PATH</code></dt><dd>Set the working directory inside the container.</dd>
+            <dt><code>--init</code></dt><dd>Run an init process that forwards signals and reaps zombies.</dd>
+            <dt><code>--memory, --cpus</code></dt><dd>Cap memory (e.g. <code>512m</code>) and CPU (e.g. <code>1.5</code>).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Attach the container to a user-defined network so it can reach other containers by name:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker run -d --name {{container_name}} --network {{network}} {{image}}:{{tag}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Runs <code class="tmpl" data-template="{{container_name}}"></code> attached to network
+            <code class="tmpl" data-template="{{network}}"></code>. Other containers on the same
+            user-defined bridge can resolve it by name via Docker's embedded DNS.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-d, --detach</code></dt><dd>Run in background.</dd>
+            <dt><code>--name string</code></dt><dd>Assign a container name.</dd>
+            <dt><code>--network string</code></dt><dd>Connect the container to a network (defaults to <code>bridge</code>).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--network-alias NAME</code></dt><dd>Additional DNS alias for the container on the network.</dd>
+            <dt><code>--ip ADDR</code></dt><dd>Pin the container to a specific IPv4 address on the network.</dd>
+            <dt><code>--hostname NAME</code></dt><dd>Set the container's hostname (defaults to its short ID).</dd>
+            <dt><code>--add-host HOST:IP</code></dt><dd>Inject an entry into the container's <code>/etc/hosts</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>3. Run an interactive shell</h2>
+    <p>Spin up a throwaway container and drop into a shell — handy for poking at an image's filesystem,
+      testing commands, or trying out a tool you don't want to install locally:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker run -it --rm {{image}}:{{tag}} /bin/sh"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Starts <code class="tmpl" data-template="{{image}}:{{tag}}"></code> with a TTY attached and
+            runs <code>/bin/sh</code> inside it. Exiting the shell stops the container; <code>--rm</code>
+            then removes it. Try <code>/bin/bash</code> for Debian/Ubuntu-based images; <code>/bin/sh</code>
+            is the safe default for Alpine. Distroless images may have no shell at all.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-i, --interactive</code></dt><dd>Keep STDIN open even when not attached.</dd>
+            <dt><code>-t, --tty</code></dt><dd>Allocate a pseudo-TTY (combine with <code>-i</code> for a usable shell).</dd>
+            <dt><code>--rm</code></dt><dd>Remove the container automatically when it exits.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--entrypoint CMD</code></dt><dd>Override the image's ENTRYPOINT — useful when the default would prevent you reaching a shell.</dd>
+            <dt><code>-u, --user UID[:GID]</code></dt><dd>Run the shell as a specific user.</dd>
+            <dt><code>-v PATH:PATH</code></dt><dd>Mount a host path so files survive after the throwaway container is gone.</dd>
+            <dt><code>--platform os/arch</code></dt><dd>Pin the platform when running multi-arch images on Apple Silicon, etc.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>4. Exec into a running container</h2>
+    <p>Attach an interactive shell to a container that's already up — your go-to for live debugging:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker exec -it {{container_name}} /bin/sh"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Spawns a new shell process inside the running container
+            <code class="tmpl" data-template="{{container_name}}"></code>. Doesn't restart the container;
+            doesn't attach to the existing main process's stdio.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-i, --interactive</code></dt><dd>Keep STDIN open.</dd>
+            <dt><code>-t, --tty</code></dt><dd>Allocate a pseudo-TTY.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-d, --detach</code></dt><dd>Run the exec'd command in the background.</dd>
+            <dt><code>-e, --env list</code></dt><dd>Set environment variables for the exec'd process only.</dd>
+            <dt><code>--env-file FILE</code></dt><dd>Read environment from a file.</dd>
+            <dt><code>-u, --user UID[:GID]</code></dt><dd>Run the command as a specific user (e.g. <code>root</code> for debugging).</dd>
+            <dt><code>-w, --workdir PATH</code></dt><dd>Working directory inside the container.</dd>
+            <dt><code>--privileged</code></dt><dd>Grant the exec'd process the same elevated permissions as the container's main process.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Run a one-shot command without a TTY — perfect for scripts and CI:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker exec {{container_name}} cat /etc/os-release"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads <code>/etc/os-release</code> from inside
+            <code class="tmpl" data-template="{{container_name}}"></code> and prints it to your shell.
+            Swap the command for anything available in the image (<code>env</code>, <code>ps</code>,
+            <code>ls</code>, <code>nslookup</code>, etc.).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>(no flags)</code></dt><dd>Non-interactive, non-TTY one-shot exec.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-i, --interactive</code></dt><dd>Pipe stdin to the command, e.g. <code>echo hi | docker exec -i c cat</code>.</dd>
+            <dt><code>-u root</code></dt><dd>Run as root even if the container's main user is unprivileged.</dd>
+            <dt><code>-w /app</code></dt><dd>Set the working directory before running the command.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>5. Inspect</h2>
+    <p>List running containers — the most-used Docker command:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker ps"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Shows currently running containers: short ID, image, command, age, status, ports, and name.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>(no flags)</code></dt><dd>Default tabular view, running containers only.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-a, --all</code></dt><dd>Show all containers including stopped ones.</dd>
+            <dt><code>-q, --quiet</code></dt><dd>Only print container IDs — handy for piping into <code>docker rm</code>.</dd>
+            <dt><code>-s, --size</code></dt><dd>Show each container's total filesystem size.</dd>
+            <dt><code>--no-trunc</code></dt><dd>Don't truncate IDs / commands.</dd>
+            <dt><code>-f, --filter KEY=VAL</code></dt><dd>Filter, e.g. <code>--filter status=exited</code> or <code>--filter name=my-app</code>.</dd>
+            <dt><code>--format json</code></dt><dd>Machine-readable output.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Show every container regardless of state — including exited ones you've forgotten about:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker ps -a"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Same view as <code>docker ps</code>, but includes stopped, exited, and dead containers.
+            Useful before a cleanup to see what you'd be removing.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-a, --all</code></dt><dd>Show all containers (default shows just running).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-n, --last N</code></dt><dd>Show the N most recently created containers across all states.</dd>
+            <dt><code>-l, --latest</code></dt><dd>Show only the latest container — quick way to grab the ID of the thing you just ran.</dd>
+            <dt><code>-f, --filter status=exited</code></dt><dd>Narrow to a specific state.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Print full low-level JSON for a container or image — image digest, mounts, network endpoints,
+      health-check state, the lot:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker inspect {{container_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Returns the full server-side object for
+            <code class="tmpl" data-template="{{container_name}}"></code> (or any image / volume /
+            network / plugin name). Pipe through <code>jq</code> for surgical extraction.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>(no flags)</code></dt><dd>JSON dump of the named object.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-f, --format TEMPLATE</code></dt><dd>Extract a single field with a Go template, e.g. <code>-f '{{.State.Status}}'</code>.</dd>
+            <dt><code>-s, --size</code></dt><dd>Include total file sizes for containers.</dd>
+            <dt><code>--type container|image|network|volume</code></dt><dd>Restrict the lookup to one object type so an ambiguous name resolves predictably.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>See the processes actually running inside the container, and a live resource usage stream:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker top {{container_name}}
+docker stats {{container_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p><code>docker top</code> is a one-shot snapshot (like <code>ps</code>);
+            <code>docker stats</code> is a continuously updating view of CPU, memory, network and block
+            I/O usage — press <code>Ctrl-C</code> to exit.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>(no flags)</code></dt><dd>Defaults: <code>top</code> snapshots once, <code>stats</code> streams forever.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--no-stream</code></dt><dd>(<code>stats</code>) Print one snapshot and exit — friendlier in scripts.</dd>
+            <dt><code>-a, --all</code></dt><dd>(<code>stats</code>) Include stopped containers in the table.</dd>
+            <dt><code>--format json</code></dt><dd>(<code>stats</code>) Emit JSON suitable for piping into <code>jq</code>.</dd>
+            <dt><code>--no-trunc</code></dt><dd>(<code>stats</code>) Don't truncate output.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>6. Logs</h2>
+    <p>Tail the last 100 lines and follow new output — exactly like <code class="inline">tail -f</code>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker logs --tail 100 -f {{container_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads the last 100 log lines from
+            <code class="tmpl" data-template="{{container_name}}"></code> and then streams new output
+            until you <code>Ctrl-C</code>. Output is whatever the container's main process wrote to
+            stdout/stderr.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-n, --tail string</code></dt><dd>Number of lines from the end of the logs. Defaults to <code>all</code>.</dd>
+            <dt><code>-f, --follow</code></dt><dd>Follow new log output as it's written.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--since DURATION|TIMESTAMP</code></dt><dd>Logs newer than e.g. <code>15m</code>, <code>1h</code>, or an RFC3339 timestamp.</dd>
+            <dt><code>--until DURATION|TIMESTAMP</code></dt><dd>Logs older than a relative or absolute timestamp — bound the window.</dd>
+            <dt><code>-t, --timestamps</code></dt><dd>Prefix each line with the time it was emitted.</dd>
+            <dt><code>--details</code></dt><dd>Include extra metadata fields the logging driver attached.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Logs from the last 15 minutes, with timestamps — useful right after a deploy:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker logs --since 15m --timestamps {{container_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Prints all log lines emitted by
+            <code class="tmpl" data-template="{{container_name}}"></code> in the last 15 minutes,
+            prefixed with RFC3339 timestamps.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--since string</code></dt><dd>Show logs since a relative duration or absolute timestamp.</dd>
+            <dt><code>-t, --timestamps</code></dt><dd>Show timestamps.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-f, --follow</code></dt><dd>Add to keep streaming after catching up.</dd>
+            <dt><code>--tail N</code></dt><dd>Cap the catch-up volume independent of <code>--since</code>.</dd>
+            <dt><code>--until 5m</code></dt><dd>Combine with <code>--since</code> to bound both ends.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>7. Stop and remove</h2>
+    <p>Graceful stop — sends SIGTERM, waits for the timeout (default 10s), then SIGKILL:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker stop {{container_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Politely asks <code class="tmpl" data-template="{{container_name}}"></code> to stop. The
+            container's PID 1 receives SIGTERM; if it's still running after the timeout it gets SIGKILL.
+            Almost always what you want — reserve <code>docker kill</code> for stuck processes.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>(no flags)</code></dt><dd>Defaults: SIGTERM, 10-second timeout.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-t, --timeout N</code></dt><dd>Seconds to wait between SIGTERM and SIGKILL.</dd>
+            <dt><code>-s, --signal SIG</code></dt><dd>Send a different initial signal (e.g. <code>SIGINT</code>).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Remove a stopped container, including any anonymous volumes attached to it:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker rm -v {{container_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Deletes <code class="tmpl" data-template="{{container_name}}"></code> and its anonymous
+            volumes from the local daemon. Named volumes are unaffected — those are removed with
+            <code>docker volume rm</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-v, --volumes</code></dt><dd>Remove anonymous volumes associated with the container.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-f, --force</code></dt><dd>Force removal of a running container — sends SIGKILL first.</dd>
+            <dt><code>-l, --link</code></dt><dd>Remove the specified container <em>link</em>, not the container itself (legacy networking).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Force-remove a running container in one step — common when iterating quickly:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker rm -f {{container_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Equivalent to <code>docker kill</code> followed by <code>docker rm</code>. The container is
+            sent SIGKILL and then deleted without waiting for graceful shutdown.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-f, --force</code></dt><dd>Force removal of a running container (uses SIGKILL).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-v, --volumes</code></dt><dd>Also drop anonymous volumes during the force-remove.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Send a specific signal without removing the container — e.g. SIGHUP to make NGINX reload its
+      config without restarting:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker kill -s HUP {{container_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Sends <code>SIGHUP</code> to PID 1 inside
+            <code class="tmpl" data-template="{{container_name}}"></code>. Despite the name,
+            <code>docker kill</code> just delivers a signal — it only kills the container when the
+            signal is fatal.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-s, --signal string</code></dt><dd>Signal to send (default <code>SIGKILL</code>). Accepts names (<code>HUP</code>, <code>USR1</code>) or numbers.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>(no other flags)</code></dt><dd><code>docker kill</code> takes only <code>-s</code>; for graceful shutdown use <code>docker stop</code> instead.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>8. Image management</h2>
+    <p>List the images currently in the local store:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker images"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Tabular view of repository, tag, image ID, created date, and size. By default hides
+            intermediate layers and dangling (untagged) images.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>(no flags)</code></dt><dd>Default summary view.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-a, --all</code></dt><dd>Include intermediate and dangling images.</dd>
+            <dt><code>--digests</code></dt><dd>Show content-addressable digests — needed when pinning images by digest.</dd>
+            <dt><code>-q, --quiet</code></dt><dd>Image IDs only.</dd>
+            <dt><code>-f, --filter dangling=true</code></dt><dd>Filter the list, e.g. find dangling images for cleanup.</dd>
+            <dt><code>--format json</code></dt><dd>Machine-readable output.</dd>
+            <dt><code>--no-trunc</code></dt><dd>Show full image IDs.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Download an image (or specific tag/digest) from its registry:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker pull {{image}}:{{tag}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Fetches the manifest and any missing layers for
+            <code class="tmpl" data-template="{{image}}:{{tag}}"></code> from its registry. Defaults to
+            Docker Hub when no registry host is given.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>(no flags)</code></dt><dd>Pull the single tag for the host's native platform.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-a, --all-tags</code></dt><dd>Download every tag in the repository.</dd>
+            <dt><code>--platform os/arch</code></dt><dd>Pull a specific platform variant from a multi-arch image.</dd>
+            <dt><code>-q, --quiet</code></dt><dd>Suppress verbose layer-by-layer output.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Push a tagged image to its registry. The image's repository must point at the destination
+      registry — see the next snippet for how to re-tag:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker push {{image}}:{{tag}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Uploads layers and manifest for
+            <code class="tmpl" data-template="{{image}}:{{tag}}"></code> to its registry. Requires you to
+            already be logged in via <code>docker login REGISTRY</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>(no flags)</code></dt><dd>Push the named tag for whichever platform manifest exists locally.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-a, --all-tags</code></dt><dd>Push every tag of the image.</dd>
+            <dt><code>--platform os/arch</code></dt><dd>Push a platform-specific manifest as a single-platform image (skips the index).</dd>
+            <dt><code>-q, --quiet</code></dt><dd>Suppress verbose progress output.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Add an extra tag to an existing image — usually to point it at another registry before pushing:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker tag {{image}}:{{tag}} registry.example.com/team/{{image}}:{{tag}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Creates a new tag <code>registry.example.com/team/<span class="tmpl" data-template="{{image}}"></span>:<span class="tmpl" data-template="{{tag}}"></span></code>
+            referring to the same image as
+            <code class="tmpl" data-template="{{image}}:{{tag}}"></code>. The image data isn't copied;
+            only the reference is added.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>(no flags)</code></dt><dd><code>docker tag</code> takes no flags — just <code>SOURCE TARGET</code>.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>(none — see related commands)</code></dt><dd>Pair with <code>docker push</code> to publish, or <code>docker rmi</code> to drop the old reference.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Remove an image. If something still references it (container, additional tag), use
+      <code class="inline">-f</code>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker rmi {{image}}:{{tag}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Removes the tag <code class="tmpl" data-template="{{image}}:{{tag}}"></code>. If this was the
+            last reference to the underlying image, the image data is deleted as well.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>(no flags)</code></dt><dd>Default — fails if a container still references the image.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-f, --force</code></dt><dd>Force removal even if a container still references the image.</dd>
+            <dt><code>--no-prune</code></dt><dd>Don't auto-delete untagged parent images.</dd>
+            <dt><code>--platform os/arch</code></dt><dd>Remove only the named platform variant.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>9. Volumes and networks</h2>
+    <p>Named volumes outlive containers — use them for any data you don't want to lose on
+      <code class="inline">docker rm</code>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker volume ls
+docker volume create {{container_name}}-data
+docker volume rm {{container_name}}-data"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Lists, creates, and removes a named volume called
+            <code class="tmpl" data-template="{{container_name}}-data"></code>. Mount it into a container
+            with <code>-v <span class="tmpl" data-template="{{container_name}}-data"></span>:/some/path</code>.</p>
+          <h4>Subcommands used</h4>
+          <dl class="flags">
+            <dt><code>docker volume ls</code></dt><dd>List volumes.</dd>
+            <dt><code>docker volume create [NAME]</code></dt><dd>Create a named (or anonymous, if NAME omitted) volume using the default <code>local</code> driver.</dd>
+            <dt><code>docker volume rm NAME</code></dt><dd>Remove a volume. Fails if a container still mounts it.</dd>
+          </dl>
+          <h4>Other subcommands you might want</h4>
+          <dl class="flags">
+            <dt><code>docker volume inspect NAME</code></dt><dd>Show driver, mountpoint, labels, and creation time for a volume.</dd>
+            <dt><code>docker volume prune</code></dt><dd>Bulk-remove every volume nothing is using.</dd>
+            <dt><code>docker volume create -d DRIVER -o OPT=VAL</code></dt><dd>Use a non-default driver / pass driver-specific options.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>User-defined bridge networks give containers DNS-based discovery by name — much nicer than the
+      default <code class="inline">bridge</code> network:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker network ls
+docker network create {{network}}
+docker network rm {{network}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Lists, creates, and removes a user-defined bridge network called
+            <code class="tmpl" data-template="{{network}}"></code>. Attach containers via
+            <code>--network <span class="tmpl" data-template="{{network}}"></span></code>; they can
+            then resolve each other by container name.</p>
+          <h4>Subcommands used</h4>
+          <dl class="flags">
+            <dt><code>docker network ls</code></dt><dd>List networks.</dd>
+            <dt><code>docker network create NAME</code></dt><dd>Create a network (defaults to the <code>bridge</code> driver).</dd>
+            <dt><code>docker network rm NAME</code></dt><dd>Remove a network. Fails if any container is still attached.</dd>
+          </dl>
+          <h4>Other subcommands and flags you might want</h4>
+          <dl class="flags">
+            <dt><code>docker network connect NAME CONTAINER</code></dt><dd>Attach a running container to an additional network.</dd>
+            <dt><code>docker network disconnect NAME CONTAINER</code></dt><dd>Detach a container from a network.</dd>
+            <dt><code>docker network inspect NAME</code></dt><dd>Show IPAM config, attached containers, options.</dd>
+            <dt><code>-d, --driver bridge|host|overlay|macvlan</code></dt><dd>Pick a non-default network driver on create.</dd>
+            <dt><code>--subnet CIDR</code></dt><dd>Override the auto-assigned subnet on create.</dd>
+            <dt><code>--internal</code></dt><dd>Restrict external access — container-only east-west traffic.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>10. Cleanup</h2>
+    <p>Drop every stopped container at once:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker container prune -f"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Removes all containers in the <code>exited</code>, <code>dead</code>, or
+            <code>created</code> states. <code>-f</code> skips the interactive confirmation.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-f, --force</code></dt><dd>Do not prompt for confirmation.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--filter until=24h</code></dt><dd>Only remove containers older than the given duration.</dd>
+            <dt><code>--filter label=KEY=VAL</code></dt><dd>Only remove containers matching a label.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Drop unused images. Without <code class="inline">-a</code> only dangling (untagged) images go;
+      <code class="inline">-a</code> also removes any tagged image not currently referenced by a
+      container:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker image prune -a -f"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reclaims disk by removing every image not in use by at least one container. Use without
+            <code>-a</code> for a more conservative dangling-only cleanup.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-a, --all</code></dt><dd>Remove all unused images, not just dangling ones.</dd>
+            <dt><code>-f, --force</code></dt><dd>Do not prompt for confirmation.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--filter until=72h</code></dt><dd>Only prune images older than the given duration.</dd>
+            <dt><code>--filter label!=keep=true</code></dt><dd>Spare images carrying a specific label.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>The nuclear option — remove all stopped containers, unused networks, unused images, the build
+      cache, and (with <code class="inline">--volumes</code>) any volume nothing references. Always read
+      what it's about to delete before typing <code class="inline">y</code>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="docker system prune -a --volumes -f"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Sweeps everything Docker considers unused. Destructive — there is no undo.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-a, --all</code></dt><dd>Remove all unused images, not just dangling ones.</dd>
+            <dt><code>--volumes</code></dt><dd>Also prune anonymous and unused named volumes.</dd>
+            <dt><code>-f, --force</code></dt><dd>Skip the confirmation prompt.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--filter until=24h</code></dt><dd>Spare anything younger than the given age.</dd>
+            <dt><code>(omit -a)</code></dt><dd>Conservative variant — only dangling images are pruned.</dd>
+            <dt><code>(omit --volumes)</code></dt><dd>Keep volumes intact; remove only containers/networks/images/cache.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <script>
+      (function () {
+        const DEFAULTS = {
+          image: "nginx",
+          tag: "alpine",
+          container_name: "my-app",
+          port_host: "8080",
+          port_container: "80",
+          volume_host: "./data",
+          volume_container: "/data",
+          network: "app-net",
+          dockerfile: "Dockerfile",
+          build_context: "."
+        };
+
+        const inputs = document.querySelectorAll("input[data-var]");
+        const templated = document.querySelectorAll("[data-template]");
+
+        function readVars() {
+          const vars = {};
+          inputs.forEach((i) => {
+            vars[i.dataset.var] = i.value;
+          });
+          return vars;
+        }
+
+        function decode(html) {
+          const t = document.createElement("textarea");
+          t.innerHTML = html;
+          return t.value;
+        }
+
+        function render() {
+          const vars = readVars();
+          templated.forEach((el) => {
+            const tpl = decode(el.getAttribute("data-template"));
+            const out = tpl.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+              Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "{{" + key + "}}"
+            );
+            el.textContent = out;
+          });
+        }
+
+        inputs.forEach((i) => i.addEventListener("input", render));
+
+        document.querySelectorAll(".copy").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const block = btn.closest(".block");
+            const code = block ? block.querySelector("pre > code") : null;
+            const text = code ? code.textContent : "";
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch (e) {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              try { document.execCommand("copy"); } catch (_) {}
+              document.body.removeChild(ta);
+            }
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("copied");
+            }, 1200);
+          });
+        });
+
+        document.getElementById("reset-btn").addEventListener("click", () => {
+          inputs.forEach((i) => {
+            i.value = DEFAULTS[i.dataset.var] ?? "";
+          });
+          render();
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

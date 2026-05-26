@@ -1,0 +1,1031 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>jq recipes</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-2: #1c2230;
+        --border: #262d3b;
+        --text: #e6e8ee;
+        --muted: #8b94a7;
+        --accent: #7aa2ff;
+        --accent-2: #9ae6b4;
+        --code-bg: #0b0d12;
+        --code-fg: #e6e8ee;
+        --btn: #2a3142;
+        --btn-hover: #38415a;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        line-height: 1.55;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 24px 80px;
+      }
+      h1 { font-size: 28px; margin: 0 0 6px; }
+      h2 { font-size: 20px; margin: 36px 0 10px; color: var(--accent); }
+      p, li { color: var(--text); }
+      .subtitle { color: var(--muted); margin: 0 0 24px; }
+      .vars {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 18px 8px;
+        position: sticky;
+        top: 12px;
+        z-index: 5;
+        box-shadow: var(--shadow);
+      }
+      .vars h2 { margin: 0 0 12px; font-size: 16px; color: var(--accent-2); }
+      .vars-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 14px;
+      }
+      .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+      .field label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .field input {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 120ms ease;
+      }
+      .field input:focus { border-color: var(--accent); }
+      .reset {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        margin-top: 6px;
+      }
+      .reset:hover { color: var(--text); border-color: var(--accent); }
+
+      .block {
+        position: relative;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin: 10px 0 18px;
+        overflow: hidden;
+      }
+      .block .lang {
+        position: absolute;
+        top: 8px;
+        left: 12px;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .block pre {
+        margin: 0;
+        padding: 30px 14px 14px;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: var(--code-fg);
+        white-space: pre;
+      }
+      .copy {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: var(--btn);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .copy:hover { background: var(--btn-hover); }
+      .copy.copied { background: #234e3c; color: #c6f6d5; border-color: #2f6b50; }
+
+      .explain {
+        border-top: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .explain > summary {
+        cursor: pointer;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        list-style: none;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: color 120ms ease;
+      }
+      .explain > summary::-webkit-details-marker { display: none; }
+      .explain > summary::before {
+        content: "▸";
+        font-size: 9px;
+        transition: transform 120ms ease;
+        display: inline-block;
+      }
+      .explain[open] > summary::before { transform: rotate(90deg); }
+      .explain > summary:hover { color: var(--text); }
+      .explain-body {
+        padding: 4px 14px 14px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text);
+      }
+      .explain-body h4 {
+        margin: 14px 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+      .explain-body p { margin: 4px 0 8px; }
+      .explain-body dl.flags {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(160px, max-content) 1fr;
+        gap: 4px 14px;
+      }
+      .explain-body dl.flags dt {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .explain-body dl.flags dt code {
+        background: transparent;
+        color: var(--accent);
+        padding: 0;
+        border: none;
+      }
+      .explain-body dl.flags dd { margin: 0; color: var(--text); }
+      .explain-body code.tmpl {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent-2);
+      }
+
+      hr.sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+      code.inline {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>jq recipes</h1>
+    <p class="subtitle">
+      Change the variables below — every snippet on the page updates live. Click <strong>Explain</strong>
+      under any command to see what each filter does, plus other jq builtins worth knowing. Tested with
+      <code class="inline">jq 1.7.1</code>.
+    </p>
+
+    <section class="vars" aria-label="Variables">
+      <h2>Variables</h2>
+      <div class="vars-grid">
+        <div class="field">
+          <label for="input_file">input file</label>
+          <input id="input_file" data-var="input_file" value="data.json" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="field">field</label>
+          <input id="field" data-var="field" value=".name" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="array_field">array field</label>
+          <input id="array_field" data-var="array_field" value=".items" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="select_key">select key</label>
+          <input id="select_key" data-var="select_key" value="status" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="select_value">select value</label>
+          <input id="select_value" data-var="select_value" value="&quot;active&quot;" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="arg_name">arg name</label>
+          <input id="arg_name" data-var="arg_name" value="key" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="arg_value">arg value</label>
+          <input id="arg_value" data-var="arg_value" value="email" autocomplete="off" />
+        </div>
+      </div>
+      <button class="reset" id="reset-btn" type="button">Reset to defaults</button>
+    </section>
+
+    <h2>1. Pretty-print and identity</h2>
+    <p>The simplest jq filter is <code class="inline">.</code> — it reads JSON, validates it, and
+      pretty-prints it back out. A quick sanity check that a file is valid JSON:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq . {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads <code class="tmpl" data-template="{{input_file}}"></code>, parses it, and re-emits
+            indented JSON. If the file isn't valid JSON, jq exits with an error.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>.</code></dt><dd>Identity filter — passes its input through unchanged. With no other transformation, jq just reformats.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-c, --compact-output</code></dt><dd>Single-line output, no spaces. Good for piping or NDJSON storage.</dd>
+            <dt><code>-S, --sort-keys</code></dt><dd>Sort object keys alphabetically for stable diffs.</dd>
+            <dt><code>--tab</code></dt><dd>Indent with tabs instead of 2 spaces.</dd>
+            <dt><code>--indent N</code></dt><dd>Use N spaces of indentation (max 7).</dd>
+            <dt><code>-C, --color-output</code></dt><dd>Force ANSI colour even when piping into a pager.</dd>
+            <dt><code>-e, --exit-status</code></dt><dd>Exit non-zero if the last output was <code>null</code> or <code>false</code> — useful in shell scripts.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Compact (single-line) output for piping into other tools or storing as NDJSON:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq -c . {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Same identity filter, but with <code>-c</code> jq emits each top-level value on a single line
+            with no whitespace — the standard newline-delimited JSON (NDJSON) shape.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-c, --compact-output</code></dt><dd>Compact instead of pretty-printed output.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--raw-output0</code></dt><dd>Implies <code>-r</code>; separates outputs with NUL bytes (safe for filenames).</dd>
+            <dt><code>-j, --join-output</code></dt><dd>Implies <code>-r</code>; no trailing newline between outputs.</dd>
+            <dt><code>--unbuffered</code></dt><dd>Flush after each output — handy when streaming.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>2. Pick a field</h2>
+    <p>Drill into an object with <code class="inline">.field</code>. Chain dots for nested access:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '{{field}}' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Evaluates the filter <code class="tmpl" data-template="{{field}}"></code> against each
+            top-level value in <code class="tmpl" data-template="{{input_file}}"></code>. If the field
+            doesn't exist, jq returns <code>null</code>; if the value isn't an object, it errors.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>.foo</code></dt><dd>Object index — looks up key <code>foo</code> on the current value.</dd>
+            <dt><code>.foo.bar</code></dt><dd>Chained indexing for nested keys.</dd>
+          </dl>
+          <h4>Related filters worth knowing</h4>
+          <dl class="flags">
+            <dt><code>.["foo"]</code></dt><dd>Quoted index — required for keys containing dots, dashes, or starting with a digit.</dd>
+            <dt><code>.foo?</code></dt><dd>Optional access — suppresses errors when the input isn't an object.</dd>
+            <dt><code>has("foo")</code></dt><dd>Returns true if the key exists (distinguishes missing vs. <code>null</code>).</dd>
+            <dt><code>keys</code> / <code>keys_unsorted</code></dt><dd>List all keys of the current object.</dd>
+            <dt><code>to_entries</code> / <code>from_entries</code></dt><dd>Convert between objects and <code>[{key, value}, …]</code> arrays.</dd>
+            <dt><code>// "fallback"</code></dt><dd>Alternative operator — replaces <code>null</code> or <code>false</code> with a default.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Use <code class="inline">?</code> when a field may be missing or wrongly typed — returns
+      <code class="inline">null</code> / nothing instead of erroring:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '.user.email?' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>The trailing <code>?</code> swallows "Cannot index X with string" errors, so non-object inputs
+            quietly produce no output instead of aborting the whole pipeline.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>.path?</code></dt><dd>Optional access — same as <code>try .path</code>.</dd>
+          </dl>
+          <h4>Related filters worth knowing</h4>
+          <dl class="flags">
+            <dt><code>try f catch g</code></dt><dd>General error handler — runs <code>g</code> with the error message when <code>f</code> raises.</dd>
+            <dt><code>// "fallback"</code></dt><dd>Replace <code>null</code>/<code>false</code> with a default value.</dd>
+            <dt><code>empty</code></dt><dd>Produces no output — useful as a placeholder when filtering.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>3. Array indexing and slicing</h2>
+    <p>Index a single element with <code class="inline">[N]</code>. Negative indices count from the end:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '.[0]' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Returns the first element of the top-level array in
+            <code class="tmpl" data-template="{{input_file}}"></code>. Use <code>.[-1]</code> for the last
+            element.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>.[N]</code></dt><dd>Array index — element at position N (0-based, negatives count from end).</dd>
+          </dl>
+          <h4>Related filters worth knowing</h4>
+          <dl class="flags">
+            <dt><code>first</code> / <code>last</code></dt><dd>Sugar for <code>.[0]</code> / <code>.[-1]</code>.</dd>
+            <dt><code>length</code></dt><dd>Array length (also works on strings and objects).</dd>
+            <dt><code>nth(N; f)</code></dt><dd>Nth output of generator <code>f</code> — works without materialising the whole array.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Iterate every element of an array with <code class="inline">[]</code> — emits each element as a
+      separate output:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '{{array_field}}[]' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Streams each element of <code class="tmpl" data-template="{{array_field}}"></code> as its own
+            top-level JSON value. Pair with <code>-c</code> to get NDJSON, or wrap the whole expression in
+            <code>[...]</code> to collect outputs back into a single array.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>.foo[]</code></dt><dd>Array/object value iterator — emits each element of the array (or each value of the object) as a separate output.</dd>
+          </dl>
+          <h4>Related filters worth knowing</h4>
+          <dl class="flags">
+            <dt><code>[ EXPR ]</code></dt><dd>Array constructor — collects all outputs of EXPR into a single array.</dd>
+            <dt><code>range(N)</code></dt><dd>Generator producing 0..N-1, useful with <code>nth</code>.</dd>
+            <dt><code>inputs</code></dt><dd>(With <code>-n</code>) emits every subsequent input value one at a time.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Slice with <code class="inline">[start:end]</code> — end-exclusive, like Python:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '{{array_field}}[0:3]' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Returns the first three elements of
+            <code class="tmpl" data-template="{{array_field}}"></code> as a new array. Either bound may be
+            omitted (<code>[:3]</code>, <code>[3:]</code>) and negatives count from the end.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>.[start:end]</code></dt><dd>Array (or string) slice — end-exclusive.</dd>
+          </dl>
+          <h4>Related filters worth knowing</h4>
+          <dl class="flags">
+            <dt><code>limit(N; f)</code></dt><dd>Take the first N outputs of generator <code>f</code>.</dd>
+            <dt><code>length</code></dt><dd>Useful for computing relative slices.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>4. Filter an array with select</h2>
+    <p><code class="inline">select(cond)</code> keeps inputs where the condition is truthy and drops the
+      rest:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '{{array_field}}[] | select(.{{select_key}} == {{select_value}})' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Iterates <code class="tmpl" data-template="{{array_field}}"></code>, keeps only elements where
+            <code class="tmpl" data-template=".{{select_key}}"></code> equals
+            <code class="tmpl" data-template="{{select_value}}"></code>, and emits each match as its own
+            output. Wrap with <code>[ ... ]</code> if you want a single array back.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>select(f)</code></dt><dd>Pass the input through if <code>f</code> is truthy, otherwise produce no output.</dd>
+            <dt><code>==</code></dt><dd>Strict structural equality — same types, same value.</dd>
+          </dl>
+          <h4>Related filters worth knowing</h4>
+          <dl class="flags">
+            <dt><code>and</code> / <code>or</code> / <code>not</code></dt><dd>Boolean composition — chain conditions.</dd>
+            <dt><code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code></dt><dd>Comparison operators (work on numbers, strings, and arrays lexicographically).</dd>
+            <dt><code>contains(x)</code></dt><dd>Deep "contains" — substring for strings, subset for arrays/objects.</dd>
+            <dt><code>in({...})</code></dt><dd>Inverse of <code>has</code> — true if the input is a key of the given object.</dd>
+            <dt><code>any(f)</code> / <code>all(f)</code></dt><dd>True if any/all elements satisfy <code>f</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Wrap the whole pipeline in <code class="inline">[ ... ]</code> to collect matches back into a
+      single array:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '[{{array_field}}[] | select(.{{select_key}} == {{select_value}})]' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>The outer <code>[ ... ]</code> array constructor collects every output of the inner pipeline
+            into a single array — useful when downstream consumers expect one JSON document, not a stream.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>[ EXPR ]</code></dt><dd>Array constructor — collects all outputs of EXPR.</dd>
+            <dt><code>select(f)</code></dt><dd>Keep input if <code>f</code> is truthy.</dd>
+          </dl>
+          <h4>Related filters worth knowing</h4>
+          <dl class="flags">
+            <dt><code>map(f)</code></dt><dd>Sugar for <code>[ .[] | f ]</code> when you already have an array.</dd>
+            <dt><code>map_values(f)</code></dt><dd>Like <code>map</code> but for object values.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>5. Map and transform</h2>
+    <p><code class="inline">map(f)</code> is sugar for <code class="inline">[ .[] | f ]</code> — apply a
+      filter to every element of an array and collect the results:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '{{array_field}} | map(.name)' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Plucks the <code>name</code> field from every element of
+            <code class="tmpl" data-template="{{array_field}}"></code>, producing a flat array of names.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>map(f)</code></dt><dd>Apply <code>f</code> to each element of an array; collect results.</dd>
+            <dt><code>|</code></dt><dd>Pipe — feed the output of the left filter as the input of the right.</dd>
+          </dl>
+          <h4>Related filters worth knowing</h4>
+          <dl class="flags">
+            <dt><code>map_values(f)</code></dt><dd>Apply <code>f</code> to each object value, preserving keys.</dd>
+            <dt><code>with_entries(f)</code></dt><dd>Map over <code>[{key, value}, …]</code> pairs — lets you rewrite keys.</dd>
+            <dt><code>reduce .[] as $x (init; step)</code></dt><dd>Fold an array down to a single value.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Project to a smaller object — shorthand <code class="inline">{name, status}</code> is the same as
+      <code class="inline">{name: .name, status: .status}</code>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '{{array_field}} | map({name, status})' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Each element of <code class="tmpl" data-template="{{array_field}}"></code> is reshaped into a
+            two-field object containing just <code>name</code> and <code>status</code>. Other fields are
+            dropped.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>{a, b}</code></dt><dd>Object constructor shorthand — equivalent to <code>{a: .a, b: .b}</code>.</dd>
+            <dt><code>map(f)</code></dt><dd>Apply <code>f</code> to each array element.</dd>
+          </dl>
+          <h4>Related filters worth knowing</h4>
+          <dl class="flags">
+            <dt><code>del(.foo, .bar)</code></dt><dd>Delete fields (opposite operation to picking).</dd>
+            <dt><code>pick(.foo, .bar)</code></dt><dd>(jq 1.7+) Build an object containing only the listed paths.</dd>
+            <dt><code>{(.k): .v}</code></dt><dd>Computed keys — useful for building objects keyed by data.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>6. group_by and count</h2>
+    <p>The classic histogram pattern — group by a key, then count each group:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '.events | group_by(.type) | map({type: .[0].type, count: length})' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p><code>group_by(.type)</code> sorts the events by type and bundles consecutive equal-key
+            elements into sub-arrays. Then <code>map(...)</code> emits one summary object per group with
+            the type and the group's length.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>group_by(f)</code></dt><dd>Sort input array by <code>f</code> and split into runs of equal-key elements. Returns an array of arrays.</dd>
+            <dt><code>map(f)</code></dt><dd>Per-group transformation.</dd>
+            <dt><code>length</code></dt><dd>Number of elements in each group's array.</dd>
+            <dt><code>.[0]</code></dt><dd>Pick the first element of a group to access the shared key.</dd>
+          </dl>
+          <h4>Related filters worth knowing</h4>
+          <dl class="flags">
+            <dt><code>unique_by(f)</code></dt><dd>Like <code>group_by</code> but keeps only the first element of each group.</dd>
+            <dt><code>add</code></dt><dd>Sum numbers, concatenate strings or arrays, merge objects.</dd>
+            <dt><code>min_by(f)</code> / <code>max_by(f)</code></dt><dd>Pick the array element with the smallest/largest key.</dd>
+            <dt><code>reduce .[] as $x (init; step)</code></dt><dd>General fold — use when group_by + map isn't expressive enough.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Sum a numeric field per group:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '.events | group_by(.user_id) | map({user_id: .[0].user_id, total: map(.amount) | add})' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Same group-then-summarise shape, but instead of <code>length</code> the per-group reducer is
+            <code>map(.amount) | add</code> — collect amounts into an array and sum them.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>group_by(f)</code></dt><dd>Partition the input array by key.</dd>
+            <dt><code>map(f) | add</code></dt><dd>Common "sum-of-field" idiom; <code>add</code> reduces with <code>+</code>.</dd>
+          </dl>
+          <h4>Related filters worth knowing</h4>
+          <dl class="flags">
+            <dt><code>(map(.amount) | add) / length</code></dt><dd>Per-group average.</dd>
+            <dt><code>[.[].amount] | add</code></dt><dd>Equivalent to <code>map(.amount) | add</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>7. Sort and unique</h2>
+    <p>Sort an array by a field — <code class="inline">sort_by</code> is stable:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '{{array_field}} | sort_by(.created_at)' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Returns <code class="tmpl" data-template="{{array_field}}"></code> sorted ascending by
+            <code>.created_at</code>. Pipe through <code>reverse</code> for descending order.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>sort_by(f)</code></dt><dd>Stable sort of an array using <code>f</code> as the key extractor.</dd>
+          </dl>
+          <h4>Related filters worth knowing</h4>
+          <dl class="flags">
+            <dt><code>sort</code></dt><dd>Sort by natural value (works on numbers, strings, arrays).</dd>
+            <dt><code>reverse</code></dt><dd>Reverse an array (or a string).</dd>
+            <dt><code>min</code> / <code>max</code> / <code>min_by(f)</code> / <code>max_by(f)</code></dt><dd>Single-element extremes — cheaper than sorting if that's all you need.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Dedupe by a key — <code class="inline">unique_by</code> sorts then collapses duplicates:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '{{array_field}} | unique_by(.id)' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Keeps the first element seen for each distinct <code>.id</code> (after sorting by id). Note
+            that <code>unique_by</code> always sorts — order isn't preserved.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>unique_by(f)</code></dt><dd>Sort by <code>f</code>, then collapse runs of equal keys to a single element.</dd>
+          </dl>
+          <h4>Related filters worth knowing</h4>
+          <dl class="flags">
+            <dt><code>unique</code></dt><dd>Whole-value dedupe — like <code>unique_by(.)</code>.</dd>
+            <dt><code>group_by(f) | map(.[0])</code></dt><dd>Equivalent to <code>unique_by(f)</code> but lets you do something else with the groups first.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>8. String operations</h2>
+    <p>Case conversion and substring tests:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '.name | ascii_upcase' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Uppercases the <code>.name</code> field as ASCII. Non-ASCII characters pass through unchanged
+            (use a locale-aware tool if you need Unicode case folding).</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>ascii_upcase</code> / <code>ascii_downcase</code></dt><dd>Per-character case conversion for ASCII letters.</dd>
+          </dl>
+          <h4>Related string builtins</h4>
+          <dl class="flags">
+            <dt><code>split("sep")</code></dt><dd>Split a string into an array on a separator.</dd>
+            <dt><code>join("sep")</code></dt><dd>Join an array of strings with a separator.</dd>
+            <dt><code>startswith(s)</code> / <code>endswith(s)</code></dt><dd>Boolean prefix/suffix test.</dd>
+            <dt><code>ltrimstr(s)</code> / <code>rtrimstr(s)</code></dt><dd>Remove a prefix/suffix if present.</dd>
+            <dt><code>ascii</code></dt><dd>Convert a number to its single-character string (ASCII).</dd>
+            <dt><code>tostring</code> / <code>tonumber</code></dt><dd>Type conversion to/from strings.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Regex filtering with <code class="inline">test</code> (boolean) — and <code class="inline">match</code>
+      when you need the matched groups:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '{{array_field}}[] | select(.email | test(&quot;@example\\.com$&quot;))' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Iterates <code class="tmpl" data-template="{{array_field}}"></code> and keeps elements whose
+            <code>.email</code> matches the regex <code>@example\.com$</code>. Note the doubled backslash —
+            once for shell, once for jq's string parser.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>test(regex)</code></dt><dd>Boolean — true if the regex matches anywhere in the string.</dd>
+            <dt><code>test(regex; flags)</code></dt><dd>Two-arg form; flags string can include <code>i</code> (case-insensitive), <code>x</code> (extended), <code>g</code> (global).</dd>
+          </dl>
+          <h4>Related regex builtins</h4>
+          <dl class="flags">
+            <dt><code>match(regex)</code></dt><dd>Full match object — offset, length, captured groups.</dd>
+            <dt><code>capture(regex)</code></dt><dd>Object of named capture groups, e.g. <code>"(?&lt;year&gt;\\d{4})"</code>.</dd>
+            <dt><code>scan(regex)</code></dt><dd>Stream every match (or capture group) in a string.</dd>
+            <dt><code>sub(regex; replacement)</code> / <code>gsub</code></dt><dd>Replace first / all matches.</dd>
+            <dt><code>splits(regex)</code></dt><dd>Split a string using a regex separator.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>9. Recursive descent</h2>
+    <p><code class="inline">..</code> walks every value in the tree — combine with type filters and
+      <code class="inline">select</code> to find values anywhere in a deeply nested structure:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq '.. | objects | select(has(&quot;email&quot;)) | .email' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Walks every value in the input, keeps only objects, then keeps only those with an
+            <code>email</code> key, and finally emits each one's <code>.email</code> value. The classic
+            "find all X anywhere in this blob" recipe.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>..</code></dt><dd>Recursive descent — emits every sub-value of the input (including itself).</dd>
+            <dt><code>objects</code></dt><dd>Type filter — passes through only object values, drops everything else.</dd>
+            <dt><code>has(key)</code></dt><dd>True if the object has the given key (even if its value is <code>null</code>).</dd>
+            <dt><code>select(f)</code></dt><dd>Keep input if <code>f</code> is truthy.</dd>
+          </dl>
+          <h4>Related filters worth knowing</h4>
+          <dl class="flags">
+            <dt><code>arrays</code>, <code>numbers</code>, <code>strings</code>, <code>booleans</code>, <code>nulls</code>, <code>values</code></dt><dd>Other type filters — same idea as <code>objects</code>.</dd>
+            <dt><code>type</code></dt><dd>Returns the type name as a string.</dd>
+            <dt><code>paths</code></dt><dd>Stream every path in the tree as an array of keys/indices.</dd>
+            <dt><code>paths(f)</code></dt><dd>Only paths where the value satisfies <code>f</code>, e.g. <code>paths(type == "string")</code>.</dd>
+            <dt><code>leaf_paths</code></dt><dd>Paths to non-object/array values only.</dd>
+            <dt><code>getpath([...])</code> / <code>setpath([...]; v)</code></dt><dd>Read / write a value by path array.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>10. Raw output and string interpolation</h2>
+    <p><code class="inline">-r</code> strips the surrounding quotes from string outputs. Combine with
+      string interpolation <code class="inline">"\(.field)"</code> to produce shell-friendly text:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq -r '{{array_field}}[] | &quot;\(.id): \(.name)&quot;' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Each element of <code class="tmpl" data-template="{{array_field}}"></code> is rendered as
+            <code>id: name</code> with no surrounding JSON quotes — one line per element, ready to feed
+            into <code>xargs</code>, <code>awk</code>, or a shell loop.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-r, --raw-output</code></dt><dd>For string outputs only, write the raw contents (no surrounding quotes, no JSON escaping).</dd>
+          </dl>
+          <h4>Related output flags / builtins</h4>
+          <dl class="flags">
+            <dt><code>--raw-output0</code></dt><dd>Implies <code>-r</code>; separates outputs with NUL — pair with <code>xargs -0</code> for filename-safe pipelines.</dd>
+            <dt><code>-j, --join-output</code></dt><dd>Implies <code>-r</code>; no newline between outputs.</dd>
+            <dt><code>@csv</code></dt><dd>Format an array as a CSV row (string fields get quoted appropriately).</dd>
+            <dt><code>@tsv</code></dt><dd>Format as tab-separated values.</dd>
+            <dt><code>@json</code></dt><dd>Inverse of <code>-r</code> — JSON-stringify a value back into a string.</dd>
+            <dt><code>@sh</code></dt><dd>Shell-quote a string or array of strings.</dd>
+            <dt><code>@uri</code></dt><dd>Percent-encode for URLs.</dd>
+            <dt><code>@base64</code> / <code>@base64d</code></dt><dd>Base64 encode / decode.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Produce CSV rows from an array of objects — input must be an array per row:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq -r '{{array_field}}[] | [.id, .name, .status] | @csv' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>For each element of <code class="tmpl" data-template="{{array_field}}"></code>, build a
+            three-element array of fields and pass it through <code>@csv</code>, which handles the quoting
+            and escaping. The <code>-r</code> flag prints raw lines instead of JSON-quoted strings.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>@csv</code></dt><dd>Format an array of primitives as a single CSV record.</dd>
+            <dt><code>-r</code></dt><dd>Print as a raw string, not a JSON string.</dd>
+          </dl>
+          <h4>Related builtins worth knowing</h4>
+          <dl class="flags">
+            <dt><code>@tsv</code></dt><dd>Same idea, tabs instead of commas (no quoting).</dd>
+            <dt><code>(["id","name","status"], ({{array_field}}[] | [.id, .name, .status])) | @csv</code></dt><dd>Common pattern for prepending a header row.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>11. Read from environment and arguments</h2>
+    <p>Pass a string into the filter with <code class="inline">--arg name value</code> — it becomes
+      <code class="inline">$name</code> inside jq:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq --arg {{arg_name}} &quot;{{arg_value}}&quot; '.[${{arg_name}}]' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Defines <code class="tmpl" data-template="${{arg_name}}"></code> as the string
+            <code class="tmpl" data-template="{{arg_value}}"></code> and uses it as a dynamic key. The
+            generic indexing form <code>.[$key]</code> works for any key, including ones with dots or
+            dashes.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--arg name value</code></dt><dd>Bind <code>$name</code> to the string <code>value</code> inside the filter. Values are never parsed as JSON.</dd>
+          </dl>
+          <h4>Related flags worth knowing</h4>
+          <dl class="flags">
+            <dt><code>--argjson name value</code></dt><dd>Bind <code>$name</code> to a parsed JSON value (number, bool, object, array, …).</dd>
+            <dt><code>--slurpfile name file</code></dt><dd>Bind <code>$name</code> to the array of JSON values read from <code>file</code>.</dd>
+            <dt><code>--rawfile name file</code></dt><dd>Bind <code>$name</code> to the raw string contents of <code>file</code>.</dd>
+            <dt><code>--args ARG …</code></dt><dd>Treat remaining args as positional strings, available via <code>$ARGS.positional</code>.</dd>
+            <dt><code>--jsonargs ARG …</code></dt><dd>Same, but parse each arg as JSON.</dd>
+            <dt><code>env.NAME</code> / <code>$ENV.NAME</code></dt><dd>Read environment variables from inside the filter.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Pass a JSON value (number, bool, object, …) with <code class="inline">--argjson</code>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq --argjson n 3 '{{array_field}}[$n]' {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Binds <code>$n</code> to the number <code>3</code> (not the string <code>"3"</code>) and uses
+            it as an array index into
+            <code class="tmpl" data-template="{{array_field}}"></code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--argjson name value</code></dt><dd>Parse <code>value</code> as JSON and bind to <code>$name</code>.</dd>
+          </dl>
+          <h4>Related flags</h4>
+          <dl class="flags">
+            <dt><code>--arg</code></dt><dd>Same idea but value is always a string.</dd>
+            <dt><code>-n, --null-input</code></dt><dd>Don't consume stdin — useful when the entire input comes from <code>--arg</code> / <code>--argjson</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>12. Multiple inputs and slurp</h2>
+    <p><code class="inline">-s</code> (slurp) reads <em>all</em> inputs into a single array — combine
+      multiple JSON documents into one:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq -s '.' a.json b.json c.json"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Without <code>-s</code>, jq applies the filter once per input value (one per file, or one per
+            top-level value in NDJSON). With <code>-s</code>, all inputs are read first and packed into a
+            single array, which becomes the input to the filter.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-s, --slurp</code></dt><dd>Read all inputs into a single array; the filter sees that array as its sole input.</dd>
+          </dl>
+          <h4>Related flags / builtins</h4>
+          <dl class="flags">
+            <dt><code>-n, --null-input</code></dt><dd>Filter starts with <code>null</code>; use <code>inputs</code> to consume the stream explicitly.</dd>
+            <dt><code>inputs</code></dt><dd>(With <code>-n</code>) generator yielding each remaining input value.</dd>
+            <dt><code>input</code></dt><dd>Pull a single additional input value.</dd>
+            <dt><code>add</code></dt><dd>Merge / concatenate / sum across the slurped array.</dd>
+            <dt><code>-R, --raw-input</code></dt><dd>Treat each input line as a string instead of JSON; with <code>-s</code> you get the whole file as one string.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Merge an array of objects into one with <code class="inline">add</code>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq -s 'add' a.json b.json"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Slurps both files into a two-element array, then <code>add</code> reduces with <code>+</code>.
+            For two objects that's a shallow right-biased merge; for arrays it's concatenation; for numbers
+            it's a sum.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>add</code></dt><dd>Equivalent to <code>reduce .[] as $x (null; . + $x)</code>.</dd>
+            <dt><code>-s</code></dt><dd>Slurp inputs into a single array.</dd>
+          </dl>
+          <h4>Related operators worth knowing</h4>
+          <dl class="flags">
+            <dt><code>a + b</code></dt><dd>Type-aware: shallow merge for objects, concat for arrays/strings, sum for numbers.</dd>
+            <dt><code>a * b</code></dt><dd>Recursive deep merge for objects — what you usually want for config overlays.</dd>
+            <dt><code>reduce .[] as $x (init; step)</code></dt><dd>General fold — use when <code>add</code> isn't the right reducer.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Read NDJSON (one JSON value per line) and aggregate:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq -s 'map(.amount) | add' events.ndjson"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>jq is already happy with newline-delimited JSON; <code>-s</code> just gathers all the line
+            objects into one array so you can run array operations like <code>map</code> over them.</p>
+          <h4>Filter / builtins used</h4>
+          <dl class="flags">
+            <dt><code>map(f)</code></dt><dd>Apply <code>f</code> to each element of the slurped array.</dd>
+            <dt><code>add</code></dt><dd>Sum the resulting array.</dd>
+          </dl>
+          <h4>Streaming alternatives</h4>
+          <dl class="flags">
+            <dt><code>jq -n '[inputs | .amount] | add'</code></dt><dd>Equivalent without materialising all inputs as a single jq array argument — works the same in practice.</dd>
+            <dt><code>--stream</code></dt><dd>Pure streaming mode — emits <code>[path, value]</code> pairs for very large inputs that won't fit in memory.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Generate JSON from scratch with <code class="inline">-n</code> ("null input") plus
+      <code class="inline">--arg</code> / <code class="inline">--argjson</code>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="jq -n --arg name &quot;alice&quot; --argjson age 30 '{name: $name, age: $age}'"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Builds <code>{"name":"alice","age":30}</code> without consuming any input. Combined with shell
+            variables this is the cleanest way to assemble JSON payloads on the command line.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-n, --null-input</code></dt><dd>Use <code>null</code> as the single input value; don't read stdin.</dd>
+            <dt><code>--arg name value</code></dt><dd>Bind <code>$name</code> to a string.</dd>
+            <dt><code>--argjson name value</code></dt><dd>Bind <code>$name</code> to a parsed JSON value.</dd>
+          </dl>
+          <h4>Related techniques</h4>
+          <dl class="flags">
+            <dt><code>jq -n --slurpfile data foo.json '...'</code></dt><dd>Read a whole file into <code>$data</code> as the array of its JSON values.</dd>
+            <dt><code>$ENV.PATH</code></dt><dd>Read environment variables — useful for templating secrets in without printing them as args.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <script>
+      (function () {
+        const DEFAULTS = {
+          input_file: "data.json",
+          field: ".name",
+          array_field: ".items",
+          select_key: "status",
+          select_value: "\"active\"",
+          arg_name: "key",
+          arg_value: "email"
+        };
+
+        const inputs = document.querySelectorAll("input[data-var]");
+        const templated = document.querySelectorAll("[data-template]");
+
+        function readVars() {
+          const vars = {};
+          inputs.forEach((i) => {
+            vars[i.dataset.var] = i.value;
+          });
+          return vars;
+        }
+
+        function decode(html) {
+          const t = document.createElement("textarea");
+          t.innerHTML = html;
+          return t.value;
+        }
+
+        function render() {
+          const vars = readVars();
+          templated.forEach((el) => {
+            const tpl = decode(el.getAttribute("data-template"));
+            const out = tpl.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+              Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "{{" + key + "}}"
+            );
+            el.textContent = out;
+          });
+        }
+
+        inputs.forEach((i) => i.addEventListener("input", render));
+
+        document.querySelectorAll(".copy").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const block = btn.closest(".block");
+            const code = block ? block.querySelector("pre > code") : null;
+            const text = code ? code.textContent : "";
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch (e) {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              try { document.execCommand("copy"); } catch (_) {}
+              document.body.removeChild(ta);
+            }
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("copied");
+            }, 1200);
+          });
+        });
+
+        document.getElementById("reset-btn").addEventListener("click", () => {
+          inputs.forEach((i) => {
+            i.value = DEFAULTS[i.dataset.var] ?? "";
+          });
+          render();
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,876 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tmux quickref</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-2: #1c2230;
+        --border: #262d3b;
+        --text: #e6e8ee;
+        --muted: #8b94a7;
+        --accent: #7aa2ff;
+        --accent-2: #9ae6b4;
+        --code-bg: #0b0d12;
+        --code-fg: #e6e8ee;
+        --btn: #2a3142;
+        --btn-hover: #38415a;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        line-height: 1.55;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 24px 80px;
+      }
+      h1 { font-size: 28px; margin: 0 0 6px; }
+      h2 { font-size: 20px; margin: 36px 0 10px; color: var(--accent); }
+      p, li { color: var(--text); }
+      .subtitle { color: var(--muted); margin: 0 0 24px; }
+      .vars {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 18px 8px;
+        position: sticky;
+        top: 12px;
+        z-index: 5;
+        box-shadow: var(--shadow);
+      }
+      .vars h2 { margin: 0 0 12px; font-size: 16px; color: var(--accent-2); }
+      .vars-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 14px;
+      }
+      .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+      .field label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .field input {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 120ms ease;
+      }
+      .field input:focus { border-color: var(--accent); }
+      .reset {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        margin-top: 6px;
+      }
+      .reset:hover { color: var(--text); border-color: var(--accent); }
+
+      .block {
+        position: relative;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin: 10px 0 18px;
+        overflow: hidden;
+      }
+      .block .lang {
+        position: absolute;
+        top: 8px;
+        left: 12px;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .block pre {
+        margin: 0;
+        padding: 30px 14px 14px;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: var(--code-fg);
+        white-space: pre;
+      }
+      .copy {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: var(--btn);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .copy:hover { background: var(--btn-hover); }
+      .copy.copied { background: #234e3c; color: #c6f6d5; border-color: #2f6b50; }
+
+      .explain {
+        border-top: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .explain > summary {
+        cursor: pointer;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        list-style: none;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: color 120ms ease;
+      }
+      .explain > summary::-webkit-details-marker { display: none; }
+      .explain > summary::before {
+        content: "▸";
+        font-size: 9px;
+        transition: transform 120ms ease;
+        display: inline-block;
+      }
+      .explain[open] > summary::before { transform: rotate(90deg); }
+      .explain > summary:hover { color: var(--text); }
+      .explain-body {
+        padding: 4px 14px 14px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text);
+      }
+      .explain-body h4 {
+        margin: 14px 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+      .explain-body p { margin: 4px 0 8px; }
+      .explain-body dl.flags {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(160px, max-content) 1fr;
+        gap: 4px 14px;
+      }
+      .explain-body dl.flags dt {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .explain-body dl.flags dt code {
+        background: transparent;
+        color: var(--accent);
+        padding: 0;
+        border: none;
+      }
+      .explain-body dl.flags dd { margin: 0; color: var(--text); }
+      .explain-body code.tmpl {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent-2);
+      }
+
+      hr.sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+      code.inline {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>tmux quickref</h1>
+    <p class="subtitle">
+      Change the variables below — every snippet on the page updates live. Most tmux usage is in-tmux
+      keybindings prefixed by <code class="inline">Ctrl-b</code> (rebind via the
+      <strong>prefix key</strong> input). Click <strong>Explain</strong> under any block for
+      flag/key details and related options.
+    </p>
+
+    <section class="vars" aria-label="Variables">
+      <h2>Variables</h2>
+      <div class="vars-grid">
+        <div class="field">
+          <label for="session_name">session name</label>
+          <input id="session_name" data-var="session_name" value="dev" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="window_name">window name</label>
+          <input id="window_name" data-var="window_name" value="editor" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="prefix_key">prefix key</label>
+          <input id="prefix_key" data-var="prefix_key" value="Ctrl-b" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="pane_command">pane command</label>
+          <input id="pane_command" data-var="pane_command" value="vim ." autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="target_pane">target pane</label>
+          <input id="target_pane" data-var="target_pane" value="0" autocomplete="off" />
+        </div>
+      </div>
+      <button class="reset" id="reset-btn" type="button">Reset to defaults</button>
+    </section>
+
+    <h2>1. Start &amp; attach sessions</h2>
+    <p>Create a named session detached from your current terminal, naming the first window and
+      launching a command inside it:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="tmux new -s {{session_name}} -n {{window_name}} &quot;{{pane_command}}&quot;"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Creates session <code class="tmpl" data-template="{{session_name}}"></code> with its first
+            window named <code class="tmpl" data-template="{{window_name}}"></code> running
+            <code class="tmpl" data-template="{{pane_command}}"></code>. Without
+            <code>-d</code>, tmux attaches immediately; add <code>-d</code> to script setup without
+            jumping into the session.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-s session-name</code></dt><dd>Name the new session. Names must be unique on the server.</dd>
+            <dt><code>-n window-name</code></dt><dd>Name the first window created with the session.</dd>
+            <dt><code>shell-command</code></dt><dd>Command to run in the new window (positional, after flags). Defaults to your login shell.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-d</code></dt><dd>Create detached — don't attach the current client. Essential for scripting.</dd>
+            <dt><code>-A</code></dt><dd>Attach to an existing session of the same name instead of erroring.</dd>
+            <dt><code>-D</code></dt><dd>With <code>-A</code>, detach any other clients already attached.</dd>
+            <dt><code>-c start-directory</code></dt><dd>Working directory for the first window's process.</dd>
+            <dt><code>-x width -y height</code></dt><dd>Force initial size when starting detached (otherwise tmux uses an 80x24 default until a client attaches).</dd>
+            <dt><code>-e KEY=VALUE</code></dt><dd>Set an environment variable in the new session (repeatable).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Attach to an existing session, or create it if it doesn't exist yet — handy as a one-liner you
+      can run on every login:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="tmux new -A -s {{session_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Attaches to session <code class="tmpl" data-template="{{session_name}}"></code> if it
+            already exists, otherwise creates a fresh one with the same name.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-A</code></dt><dd>Behave like <code>attach-session</code> if a session with this name exists.</dd>
+            <dt><code>-s session-name</code></dt><dd>Session to attach to or create.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-D</code></dt><dd>Detach any other client already attached to this session (useful if you forgot to detach on the other machine).</dd>
+            <dt><code>-d</code></dt><dd>Create-only — never attach.</dd>
+            <dt><code>-t target-session</code></dt><dd>With <code>-A</code>, name an existing session to attach to instead of creating.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Attach to a session you know exists:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="tmux attach -t {{session_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Connects the current terminal to session
+            <code class="tmpl" data-template="{{session_name}}"></code>. Errors if the session is
+            missing — use <code>tmux new -A</code> to be idempotent.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-t target-session</code></dt><dd>Session to attach to. A unique prefix is accepted.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-d</code></dt><dd>Detach any other clients already attached to the target session.</dd>
+            <dt><code>-x</code></dt><dd>Send <code>SIGHUP</code> to the previously attached client so it exits cleanly.</dd>
+            <dt><code>-r</code></dt><dd>Attach in read-only mode (input ignored).</dd>
+            <dt><code>-E</code></dt><dd>Don't apply the <code>update-environment</code> option — keep the session's existing env.</dd>
+            <dt><code>-c working-directory</code></dt><dd>Override the session's current working directory for this client.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>List every session on the running tmux server, with attached/detached state and window counts:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="tmux ls"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Shorthand for <code>list-sessions</code>. Prints one line per session: name, window count,
+            creation time, and an <code>(attached)</code> marker if a client is connected.</p>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-F format</code></dt><dd>Custom output template using format variables, e.g. <code>-F "#{session_name}: #{session_windows}"</code>.</dd>
+            <dt><code>-f filter</code></dt><dd>Only include sessions matching a format expression, e.g. <code>-f "#{?session_attached,1,0}"</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>2. Detach and kill</h2>
+    <p>Detach from your current session — it keeps running on the server and you can reattach later:</p>
+    <div class="block">
+      <span class="lang">keys</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="{{prefix_key}} d"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Sends the <code>detach-client</code> command. Your shell pops back to the terminal that
+            launched tmux; processes inside the session continue running.</p>
+          <h4>Keys used</h4>
+          <dl class="flags">
+            <dt><code class="tmpl" data-template="{{prefix_key}}"></code></dt><dd>The prefix — every tmux keybinding starts here (default <code>Ctrl-b</code>; many users rebind to <code>Ctrl-a</code>).</dd>
+            <dt><code>d</code></dt><dd>Bound to <code>detach-client</code>.</dd>
+          </dl>
+          <h4>Related keybindings</h4>
+          <dl class="flags">
+            <dt><code class="tmpl" data-template="{{prefix_key}} D"></code></dt><dd>Choose <em>which</em> client to detach (when multiple are attached).</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} s"></code></dt><dd>Interactive session picker — switch without detaching.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} $"></code></dt><dd>Rename the current session.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} ("></code> / <code class="tmpl" data-template="{{prefix_key}} )"></code></dt><dd>Switch to the previous / next session.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Kill a single session by name (other sessions keep running):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="tmux kill-session -t {{session_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Terminates session <code class="tmpl" data-template="{{session_name}}"></code> and every
+            window/pane inside it. Any client attached to that session is detached.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-t target-session</code></dt><dd>Session to kill.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-a</code></dt><dd>Kill all sessions <em>except</em> the target — useful for cleanup.</dd>
+            <dt><code>-C</code></dt><dd>Clear alerts (bell, activity, silence) for the session instead of killing it.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Nuclear option — kill every session and stop the tmux server process itself:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="tmux kill-server"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Stops the tmux server, terminating all sessions, windows, panes, and the processes running
+            inside them. There's no confirmation — use sparingly.</p>
+          <h4>Related commands</h4>
+          <dl class="flags">
+            <dt><code>tmux kill-session -a</code></dt><dd>Kill all sessions except the current one — safer alternative.</dd>
+            <dt><code>tmux kill-window -t SESSION:WINDOW</code></dt><dd>Kill just one window.</dd>
+            <dt><code>tmux kill-pane -t SESSION:WINDOW.PANE</code></dt><dd>Kill just one pane.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>3. Windows</h2>
+    <p>Windows are tmux's equivalent of tabs — one full-screen workspace per window inside a session.
+      Open a new window in the current session:</p>
+    <div class="block">
+      <span class="lang">keys</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="{{prefix_key}} c"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Bound to <code>new-window</code>. The new window's number is the lowest free index in the
+            session (1, 2, 3, …) and it becomes the active window.</p>
+          <h4>Related keybindings</h4>
+          <dl class="flags">
+            <dt><code class="tmpl" data-template="{{prefix_key}} n"></code></dt><dd>Next window in this session.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} p"></code></dt><dd>Previous window.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} 0"></code> … <code class="tmpl" data-template="{{prefix_key}} 9"></code></dt><dd>Jump to window by number.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} ,"></code></dt><dd>Rename the current window.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} &amp;"></code></dt><dd>Kill the current window (prompts for confirmation).</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} w"></code></dt><dd>Interactive window picker (across all sessions).</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} l"></code></dt><dd>Switch to the last (previously active) window.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} f"></code></dt><dd>Find a window by text it currently contains.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Rename the active window from the shell (handy when scripting):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="tmux rename-window -t {{session_name}}:0 {{window_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Renames window index <code>0</code> in session
+            <code class="tmpl" data-template="{{session_name}}"></code> to
+            <code class="tmpl" data-template="{{window_name}}"></code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-t target-window</code></dt><dd>Window to rename. Format: <code>session:window</code>.</dd>
+            <dt><code>new-name</code></dt><dd>Positional argument — the replacement window name.</dd>
+          </dl>
+          <h4>Other commands you might want</h4>
+          <dl class="flags">
+            <dt><code>tmux new-window -t SESS -n NAME CMD</code></dt><dd>Create a window without attaching first.</dd>
+            <dt><code>tmux list-windows -t SESS</code></dt><dd>List windows with their indexes, names, and dimensions.</dd>
+            <dt><code>tmux move-window -s SRC -t DST</code></dt><dd>Move a window between sessions or to a new index.</dd>
+            <dt><code>tmux swap-window -s SRC -t DST</code></dt><dd>Swap two windows' positions.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>4. Panes</h2>
+    <p>Panes are tiled splits inside a single window. Split the current pane in half horizontally
+      (a new pane below) or vertically (a new pane to the right):</p>
+    <div class="block">
+      <span class="lang">keys</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="{{prefix_key}} &quot;     # horizontal split (new pane below)
+{{prefix_key}} %     # vertical split (new pane to the right)"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Both bindings call <code>split-window</code>; the difference is just the orientation flag
+            (<code>-v</code> for horizontal split, <code>-h</code> for vertical). The new pane inherits
+            the current pane's working directory by default.</p>
+          <h4>Keys used</h4>
+          <dl class="flags">
+            <dt><code class="tmpl" data-template="{{prefix_key}} &quot;"></code></dt><dd><code>split-window -v</code> — new pane stacked below.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} %"></code></dt><dd><code>split-window -h</code> — new pane to the right.</dd>
+          </dl>
+          <h4>Related keybindings</h4>
+          <dl class="flags">
+            <dt><code class="tmpl" data-template="{{prefix_key}} o"></code></dt><dd>Cycle to the next pane in this window.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} ;"></code></dt><dd>Toggle to the previously active pane.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} q"></code></dt><dd>Briefly show pane numbers; press the number to jump.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} x"></code></dt><dd>Kill the current pane (confirms first).</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} z"></code></dt><dd>Zoom (toggle) — temporarily make the current pane fullscreen within its window.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} {"></code> / <code class="tmpl" data-template="{{prefix_key}} }"></code></dt><dd>Swap pane with the previous/next in the layout.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} !"></code></dt><dd>Break the current pane out into its own new window.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Move focus between panes with the prefix followed by an arrow key:</p>
+    <div class="block">
+      <span class="lang">keys</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="{{prefix_key}} &lt;Left&gt;     # focus pane to the left
+{{prefix_key}} &lt;Right&gt;    # focus pane to the right
+{{prefix_key}} &lt;Up&gt;       # focus pane above
+{{prefix_key}} &lt;Down&gt;     # focus pane below"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Each binding calls <code>select-pane</code> with a direction (<code>-L</code>,
+            <code>-R</code>, <code>-U</code>, <code>-D</code>). Combine with <code>repeat-time</code>
+            (the <code>-r</code> bind flag, on by default for these keys) so you can press the arrows
+            repeatedly without re-pressing the prefix.</p>
+          <h4>Related keybindings</h4>
+          <dl class="flags">
+            <dt><code class="tmpl" data-template="{{prefix_key}} o"></code></dt><dd>Cycle to next pane (any direction).</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} ;"></code></dt><dd>Last active pane.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} q 0..9"></code></dt><dd>Show pane numbers, then type a digit to jump.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>5. Resize panes</h2>
+    <p>Hold the prefix once, then press <code class="inline">Ctrl</code> + an arrow to nudge the pane
+      border by one cell at a time:</p>
+    <div class="block">
+      <span class="lang">keys</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="{{prefix_key}} Ctrl-&lt;Left&gt;    # shrink right edge / grow left edge by 1
+{{prefix_key}} Ctrl-&lt;Right&gt;   # opposite
+{{prefix_key}} Ctrl-&lt;Up&gt;      # shrink bottom edge / grow top edge by 1
+{{prefix_key}} Ctrl-&lt;Down&gt;    # opposite"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>These call <code>resize-pane</code> with <code>-L</code>/<code>-R</code>/<code>-U</code>/
+            <code>-D</code>. They're repeat-bound, so after the prefix you can spam the arrows.</p>
+          <h4>Related keybindings</h4>
+          <dl class="flags">
+            <dt><code class="tmpl" data-template="{{prefix_key}} Alt-&lt;arrow&gt;"></code></dt><dd>Resize in larger 5-cell steps.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} z"></code></dt><dd>Zoom toggle — gives one pane all the room without resizing the others.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>For precise sizing, open the tmux command prompt with
+      <code class="inline">{{prefix_key}} :</code> and resize by an exact number of cells:</p>
+    <div class="block">
+      <span class="lang">tmux</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template=":resize-pane -L 10
+:resize-pane -R 10
+:resize-pane -U 5
+:resize-pane -D 5
+:resize-pane -x 80 -y 24"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Run from the tmux command prompt (<code>:</code>). The directional flags resize by an
+            adjustment value (default 1); <code>-x</code>/<code>-y</code> set absolute dimensions.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-L / -R / -U / -D</code></dt><dd>Direction to grow or shrink.</dd>
+            <dt><code>adjustment</code></dt><dd>Trailing positional number — how many cells to resize by.</dd>
+            <dt><code>-x width</code></dt><dd>Set absolute width in columns.</dd>
+            <dt><code>-y height</code></dt><dd>Set absolute height in rows.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-Z</code></dt><dd>Toggle zoom on the target pane.</dd>
+            <dt><code>-t target-pane</code></dt><dd>Pane to resize (default: active pane).</dd>
+            <dt><code>-T</code></dt><dd>Trim lines below the cursor (rarely needed).</dd>
+            <dt><code>-M</code></dt><dd>Begin mouse resize drag (used by mouse bindings).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>6. Layouts</h2>
+    <p>Cycle through tmux's five preset layouts in order:</p>
+    <div class="block">
+      <span class="lang">keys</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="{{prefix_key}} &lt;Space&gt;"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Calls <code>next-layout</code>, which rotates between
+            <code>even-horizontal</code>, <code>even-vertical</code>, <code>main-horizontal</code>,
+            <code>main-vertical</code>, and <code>tiled</code>.</p>
+        </div>
+      </details>
+    </div>
+
+    <p>Jump directly to a preset layout:</p>
+    <div class="block">
+      <span class="lang">keys</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="{{prefix_key}} Alt-1     # even-horizontal (rows of equal-height panes)
+{{prefix_key}} Alt-2     # even-vertical (columns of equal-width panes)
+{{prefix_key}} Alt-3     # main-horizontal (one large pane on top, row of small below)
+{{prefix_key}} Alt-4     # main-vertical (one large pane left, column of small right)
+{{prefix_key}} Alt-5     # tiled (auto grid)"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Each binding calls <code>select-layout</code> with the named layout. The "main" layouts
+            treat the active pane as the large one; switch panes first to control which becomes the
+            focal pane.</p>
+          <h4>Related commands</h4>
+          <dl class="flags">
+            <dt><code>:select-layout tiled</code></dt><dd>Apply a layout by name from the command prompt.</dd>
+            <dt><code>:select-layout -E</code></dt><dd>Spread panes evenly within the current layout (without changing the layout).</dd>
+            <dt><code>:select-layout -o</code></dt><dd>Toggle between the current layout and the previous one.</dd>
+            <dt><code class="tmpl" data-template="{{prefix_key}} Ctrl-o"></code></dt><dd>Rotate panes within the current layout.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>7. Copy mode</h2>
+    <p>Enter copy mode to scroll back through the pane's history and select text. <code>q</code> exits
+      back to your shell:</p>
+    <div class="block">
+      <span class="lang">keys</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="{{prefix_key}} [        # enter copy mode
+&lt;Space&gt;        # start selection (emacs mode) — use 'v' if you set mode-keys vi
+&lt;arrows&gt;       # move the cursor / extend selection
+&lt;Enter&gt;        # copy the selection to a tmux buffer
+q              # exit copy mode
+{{prefix_key}} ]        # paste the most recent buffer"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Copy mode replaces your shell prompt with a navigable view of the pane's scrollback
+            buffer. The keybindings shown are the default <em>emacs</em> mode; with
+            <code>setw -g mode-keys vi</code> in your config you get vi-style motions
+            (<code>h/j/k/l</code>, <code>v</code> to start selection, <code>y</code> to yank).</p>
+          <h4>Related keybindings (in copy mode)</h4>
+          <dl class="flags">
+            <dt><code>?</code></dt><dd>Search backward through the buffer.</dd>
+            <dt><code>/</code></dt><dd>Search forward.</dd>
+            <dt><code>n</code> / <code>N</code></dt><dd>Repeat search in the same / opposite direction.</dd>
+            <dt><code>g</code> / <code>G</code></dt><dd>Jump to the top / bottom of the buffer.</dd>
+            <dt><code>0</code> / <code>$</code></dt><dd>Beginning / end of the current line.</dd>
+            <dt><code>Ctrl-u</code> / <code>Ctrl-d</code></dt><dd>Half-page up / down.</dd>
+          </dl>
+          <h4>Related commands (from the shell)</h4>
+          <dl class="flags">
+            <dt><code>tmux list-buffers</code></dt><dd>Show all cut buffers tmux is holding.</dd>
+            <dt><code>tmux save-buffer FILE</code></dt><dd>Write the most recent buffer to a file.</dd>
+            <dt><code>tmux show-buffer</code></dt><dd>Print the most recent buffer to stdout.</dd>
+            <dt><code>tmux paste-buffer -t TARGET</code></dt><dd>Paste a buffer into a specific pane.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>8. Send keys to a pane from the shell</h2>
+    <p>Send a command line to a specific pane without attaching to its session — note the literal
+      <code class="inline">Enter</code> token so the shell inside the pane actually executes it:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="tmux send-keys -t {{session_name}}:{{window_name}}.{{target_pane}} &quot;echo hello&quot; Enter"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Types <code>echo hello</code> followed by a newline into pane
+            <code class="tmpl" data-template="{{target_pane}}"></code> of window
+            <code class="tmpl" data-template="{{window_name}}"></code> in session
+            <code class="tmpl" data-template="{{session_name}}"></code>. Each positional argument is
+            either a literal string or a tmux key name (<code>Enter</code>, <code>C-c</code>,
+            <code>Escape</code>, <code>BTab</code>, etc.).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-t target-pane</code></dt><dd>Target in <code>session:window.pane</code> form. Window can be name or index; pane is its index.</dd>
+            <dt><code>key ...</code></dt><dd>Positional list of strings and/or key names to send.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-l</code></dt><dd>Send keys literally — don't interpret <code>Enter</code>/<code>C-c</code> as key names.</dd>
+            <dt><code>-R</code></dt><dd>Reset the terminal state of the target pane before sending.</dd>
+            <dt><code>-N repeat-count</code></dt><dd>Repeat the key sequence N times.</dd>
+            <dt><code>-H</code></dt><dd>Interpret arguments as hex bytes (e.g. <code>0x0d</code> for Enter).</dd>
+            <dt><code>-M</code></dt><dd>Send a mouse event (used internally by mouse bindings).</dd>
+          </dl>
+          <p>To send a Ctrl-C to interrupt a running process:
+            <code class="inline">tmux send-keys -t {{session_name}}:{{window_name}}.{{target_pane}} C-c</code>.</p>
+        </div>
+      </details>
+    </div>
+
+    <h2>9. Scripting a workspace</h2>
+    <p>Build a multi-pane session in one shot, then attach to it. Each <code class="inline">tmux</code>
+      command targets the session by name so order doesn't matter much:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="tmux new -d -s {{session_name}} -n {{window_name}} &quot;{{pane_command}}&quot;
+tmux split-window -t {{session_name}}:{{window_name}} -h &quot;tail -f /var/log/app.log&quot;
+tmux split-window -t {{session_name}}:{{window_name}} -v &quot;htop&quot;
+tmux select-layout -t {{session_name}}:{{window_name}} tiled
+tmux attach -t {{session_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Creates session <code class="tmpl" data-template="{{session_name}}"></code> detached,
+            adds two more panes (one horizontal split running <code>tail</code>, one vertical split
+            running <code>htop</code>), re-tiles them evenly, then attaches.</p>
+          <h4>Commands used</h4>
+          <dl class="flags">
+            <dt><code>new -d -s NAME -n WIN CMD</code></dt><dd>Create a detached session with a named first window running CMD.</dd>
+            <dt><code>split-window -t TARGET -h CMD</code></dt><dd>Split horizontally (new pane to the right) and run CMD in it.</dd>
+            <dt><code>split-window -t TARGET -v CMD</code></dt><dd>Split vertically (new pane below) and run CMD.</dd>
+            <dt><code>select-layout -t TARGET NAME</code></dt><dd>Apply a named preset layout.</dd>
+            <dt><code>attach -t NAME</code></dt><dd>Attach the current terminal to the session.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-c start-directory</code></dt><dd>Working directory for the new pane (on both <code>new</code> and <code>split-window</code>).</dd>
+            <dt><code>-l size</code></dt><dd>Size of the new pane — a number of cells or a percentage like <code>30%</code>.</dd>
+            <dt><code>-b</code></dt><dd>Place the new pane <em>before</em> (left/above) the target instead of after.</dd>
+            <dt><code>-P</code></dt><dd>Print the new pane's ID — capture it for further commands.</dd>
+            <dt><code>-d</code></dt><dd>Don't make the new pane the active pane.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>10. Common ~/.tmux.conf tweaks</h2>
+    <p>A minimal, opinionated starting config. Drop it in <code class="inline">~/.tmux.conf</code> and
+      reload with <code class="inline">tmux source-file ~/.tmux.conf</code> (or use the
+      <code class="inline">{{prefix_key}} r</code> binding included at the bottom):</p>
+    <div class="block">
+      <span class="lang">tmux.conf</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="# Use Ctrl-a as the prefix (closer to your home row)
+unbind C-b
+set -g prefix C-a
+bind C-a send-prefix
+
+# 256-colour + true-colour terminal
+set -g default-terminal &quot;tmux-256color&quot;
+set -ga terminal-overrides &quot;,xterm-256color:Tc&quot;
+
+# Mouse: click panes/windows, drag to resize, scroll to enter copy mode
+set -g mouse on
+
+# Vi-style keys in copy mode
+setw -g mode-keys vi
+
+# Start window and pane numbering at 1, renumber on close
+set -g base-index 1
+setw -g pane-base-index 1
+set -g renumber-windows on
+
+# Bigger scrollback buffer
+set -g history-limit 50000
+
+# Reload config without restarting
+bind r source-file ~/.tmux.conf \; display &quot;Reloaded ~/.tmux.conf&quot;"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Each line is a tmux command run at startup. Edit and re-source freely — these are safe to
+            tweak and don't require restarting the server.</p>
+          <h4>Directives used</h4>
+          <dl class="flags">
+            <dt><code>set -g OPTION VALUE</code></dt><dd>Set a global server/session option (<code>-g</code> = global).</dd>
+            <dt><code>setw -g OPTION VALUE</code></dt><dd>Shorthand for <code>set-window-option</code> — options that apply per window.</dd>
+            <dt><code>set -ga OPTION VALUE</code></dt><dd><code>-a</code> appends to a list-valued option instead of replacing it.</dd>
+            <dt><code>unbind KEY</code></dt><dd>Remove an existing binding.</dd>
+            <dt><code>bind KEY COMMAND</code></dt><dd>Bind a key (under the prefix table) to a tmux command.</dd>
+            <dt><code>send-prefix</code></dt><dd>Pass the prefix through to the running program — needed so apps still see Ctrl-a.</dd>
+          </dl>
+          <h4>Other options you might want</h4>
+          <dl class="flags">
+            <dt><code>set -g status-position top</code></dt><dd>Move the status bar to the top of the screen.</dd>
+            <dt><code>set -g escape-time 10</code></dt><dd>Reduce the delay after Escape (helps Vim/Neovim feel snappier).</dd>
+            <dt><code>set -g focus-events on</code></dt><dd>Forward terminal focus events to running programs.</dd>
+            <dt><code>setw -g monitor-activity on</code></dt><dd>Highlight windows with new output.</dd>
+            <dt><code>set -g aggressive-resize on</code></dt><dd>Resize windows based on the smallest attached client showing them.</dd>
+            <dt><code>set -g status-interval 5</code></dt><dd>How often the status line refreshes (seconds).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <script>
+      (function () {
+        const DEFAULTS = {
+          session_name: "dev",
+          window_name: "editor",
+          prefix_key: "Ctrl-b",
+          pane_command: "vim .",
+          target_pane: "0"
+        };
+
+        const inputs = document.querySelectorAll("input[data-var]");
+        const templated = document.querySelectorAll("[data-template]");
+
+        function readVars() {
+          const vars = {};
+          inputs.forEach((i) => {
+            vars[i.dataset.var] = i.value;
+          });
+          return vars;
+        }
+
+        function decode(html) {
+          const t = document.createElement("textarea");
+          t.innerHTML = html;
+          return t.value;
+        }
+
+        function render() {
+          const vars = readVars();
+          templated.forEach((el) => {
+            const tpl = decode(el.getAttribute("data-template"));
+            const out = tpl.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+              Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "{{" + key + "}}"
+            );
+            el.textContent = out;
+          });
+        }
+
+        inputs.forEach((i) => i.addEventListener("input", render));
+
+        document.querySelectorAll(".copy").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const block = btn.closest(".block");
+            const code = block ? block.querySelector("pre > code") : null;
+            const text = code ? code.textContent : "";
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch (e) {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              try { document.execCommand("copy"); } catch (_) {}
+              document.body.removeChild(ta);
+            }
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("copied");
+            }, 1200);
+          });
+        });
+
+        document.getElementById("reset-btn").addEventListener("click", () => {
+          inputs.forEach((i) => {
+            i.value = DEFAULTS[i.dataset.var] ?? "";
+          });
+          render();
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>
