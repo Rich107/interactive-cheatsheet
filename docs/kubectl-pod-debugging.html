@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>kubectl pod debugging</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-2: #1c2230;
+        --border: #262d3b;
+        --text: #e6e8ee;
+        --muted: #8b94a7;
+        --accent: #7aa2ff;
+        --accent-2: #9ae6b4;
+        --code-bg: #0b0d12;
+        --code-fg: #e6e8ee;
+        --btn: #2a3142;
+        --btn-hover: #38415a;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        line-height: 1.55;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 24px 80px;
+      }
+      h1 { font-size: 28px; margin: 0 0 6px; }
+      h2 { font-size: 20px; margin: 36px 0 10px; color: var(--accent); }
+      p, li { color: var(--text); }
+      .subtitle { color: var(--muted); margin: 0 0 24px; }
+      .vars {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 18px 8px;
+        position: sticky;
+        top: 12px;
+        z-index: 5;
+        box-shadow: var(--shadow);
+      }
+      .vars h2 { margin: 0 0 12px; font-size: 16px; color: var(--accent-2); }
+      .vars-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 14px;
+      }
+      .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+      .field label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .field input {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 120ms ease;
+      }
+      .field input:focus { border-color: var(--accent); }
+      .reset {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        margin-top: 6px;
+      }
+      .reset:hover { color: var(--text); border-color: var(--accent); }
+
+      .block {
+        position: relative;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin: 10px 0 18px;
+        overflow: hidden;
+      }
+      .block .lang {
+        position: absolute;
+        top: 8px;
+        left: 12px;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .block pre {
+        margin: 0;
+        padding: 30px 14px 14px;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: var(--code-fg);
+        white-space: pre;
+      }
+      .copy {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: var(--btn);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .copy:hover { background: var(--btn-hover); }
+      .copy.copied { background: #234e3c; color: #c6f6d5; border-color: #2f6b50; }
+
+      .explain {
+        border-top: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .explain > summary {
+        cursor: pointer;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        list-style: none;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: color 120ms ease;
+      }
+      .explain > summary::-webkit-details-marker { display: none; }
+      .explain > summary::before {
+        content: "▸";
+        font-size: 9px;
+        transition: transform 120ms ease;
+        display: inline-block;
+      }
+      .explain[open] > summary::before { transform: rotate(90deg); }
+      .explain > summary:hover { color: var(--text); }
+      .explain-body {
+        padding: 4px 14px 14px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text);
+      }
+      .explain-body h4 {
+        margin: 14px 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+      .explain-body p { margin: 4px 0 8px; }
+      .explain-body dl.flags {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(160px, max-content) 1fr;
+        gap: 4px 14px;
+      }
+      .explain-body dl.flags dt {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .explain-body dl.flags dt code {
+        background: transparent;
+        color: var(--accent);
+        padding: 0;
+        border: none;
+      }
+      .explain-body dl.flags dd { margin: 0; color: var(--text); }
+      .explain-body code.tmpl {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent-2);
+      }
+
+      hr.sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+      code.inline {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>kubectl pod debugging</h1>
+    <p class="subtitle">
+      Change the variables below — every snippet on the page updates live. Click <strong>Explain</strong>
+      under any command to see what each flag does, plus other flags worth knowing.
+    </p>
+
+    <section class="vars" aria-label="Variables">
+      <h2>Variables</h2>
+      <div class="vars-grid">
+        <div class="field">
+          <label for="context">context</label>
+          <input id="context" data-var="context" value="my-cluster" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="namespace">namespace</label>
+          <input id="namespace" data-var="namespace" value="default" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="pod">pod</label>
+          <input id="pod" data-var="pod" value="my-app-7d9b4c5f8-xyz12" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="container">container</label>
+          <input id="container" data-var="container" value="app" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="local_port">local port</label>
+          <input id="local_port" data-var="local_port" value="8080" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="remote_port">remote port</label>
+          <input id="remote_port" data-var="remote_port" value="8080" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="local_file">local file</label>
+          <input id="local_file" data-var="local_file" value="./debug.log" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="remote_file">remote file</label>
+          <input id="remote_file" data-var="remote_file" value="/var/log/app.log" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="tail_lines">tail lines</label>
+          <input id="tail_lines" data-var="tail_lines" value="100" autocomplete="off" />
+        </div>
+      </div>
+      <button class="reset" id="reset-btn" type="button">Reset to defaults</button>
+    </section>
+
+    <h2>1. List pods and get status</h2>
+    <p>List pods in the namespace with extra detail (node, IP, restart count):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="kubectl --context={{context}} -n {{namespace}} get pods -o wide"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Lists every pod in namespace <code class="tmpl" data-template="{{namespace}}"></code> on
+            context <code class="tmpl" data-template="{{context}}"></code>, using the wide output format
+            so you also see node assignment, pod IP, nominated node, and readiness gates.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--context=NAME</code></dt><dd>Name of the kubeconfig context to use for this command (global flag).</dd>
+            <dt><code>-n, --namespace=NAME</code></dt><dd>Target namespace for this request (global flag).</dd>
+            <dt><code>-o, --output=FORMAT</code></dt><dd>Output format. <code>wide</code> appends node and IP columns; other values include <code>json</code>, <code>yaml</code>, <code>name</code>, <code>jsonpath</code>, <code>custom-columns</code>.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-A, --all-namespaces</code></dt><dd>List pods across every namespace — ignores <code>-n</code>.</dd>
+            <dt><code>-l, --selector=KEY=VAL</code></dt><dd>Filter by label, e.g. <code>-l app=web,tier=frontend</code>.</dd>
+            <dt><code>--field-selector=KEY=VAL</code></dt><dd>Filter by field, e.g. <code>--field-selector=status.phase=Pending</code>.</dd>
+            <dt><code>-w, --watch</code></dt><dd>Stream changes as they happen instead of exiting.</dd>
+            <dt><code>--show-labels</code></dt><dd>Append a LABELS column to the default table output.</dd>
+            <dt><code>-L, --label-columns=LIST</code></dt><dd>Promote specific labels into their own columns.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Dump the full spec/status YAML for a single pod — the source of truth for restart counts,
+      container states, conditions, and image digests:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="kubectl --context={{context}} -n {{namespace}} get pod {{pod}} -o yaml"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Prints the full server-side object for pod
+            <code class="tmpl" data-template="{{pod}}"></code> as YAML. Inspect
+            <code>status.containerStatuses[]</code> for restart counts and last-termination reasons,
+            and <code>status.conditions[]</code> for scheduling/readiness gates.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--context=NAME</code></dt><dd>Kubeconfig context to use.</dd>
+            <dt><code>-n, --namespace=NAME</code></dt><dd>Target namespace.</dd>
+            <dt><code>-o, --output=yaml</code></dt><dd>Render the resource as YAML. Pair with <code>json</code> for jq pipelines.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-o json</code></dt><dd>Same content, JSON formatting — feed straight into <code>jq</code>.</dd>
+            <dt><code>-o jsonpath='{...}'</code></dt><dd>Extract a single field, e.g. <code>-o jsonpath='{.status.phase}'</code>.</dd>
+            <dt><code>--show-managed-fields</code></dt><dd>Include the verbose <code>metadata.managedFields</code> block (off by default).</dd>
+            <dt><code>--subresource=status</code></dt><dd>Fetch the <code>status</code> subresource only.</dd>
+            <dt><code>--ignore-not-found</code></dt><dd>Don't error if the named pod is missing — useful in scripts.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>2. Describe a pod</h2>
+    <p>A human-readable rollup of spec, status, container states, recent events, and the kubelet's view
+      of conditions. Usually your first stop when a pod is stuck in <code class="inline">Pending</code>,
+      <code class="inline">CrashLoopBackOff</code>, or <code class="inline">ImagePullBackOff</code>:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="kubectl --context={{context}} -n {{namespace}} describe pod {{pod}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Prints a detailed description of pod
+            <code class="tmpl" data-template="{{pod}}"></code>, including related events. If no exact
+            name match is found, kubectl falls back to matching by name prefix.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--context=NAME</code></dt><dd>Kubeconfig context to use.</dd>
+            <dt><code>-n, --namespace=NAME</code></dt><dd>Target namespace.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-l, --selector=KEY=VAL</code></dt><dd>Describe every pod matching a label selector instead of a single name.</dd>
+            <dt><code>-A, --all-namespaces</code></dt><dd>Describe matching pods across all namespaces.</dd>
+            <dt><code>--show-events=false</code></dt><dd>Suppress the events section (events are shown by default).</dd>
+            <dt><code>-f, --filename=FILE</code></dt><dd>Describe resources identified by a YAML/JSON manifest.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>3. Stream and fetch logs</h2>
+    <p>Snapshot the last N lines from the pod (single container or default container):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="kubectl --context={{context}} -n {{namespace}} logs {{pod}} --tail={{tail_lines}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Prints the last <code class="tmpl" data-template="{{tail_lines}}"></code> log lines from
+            pod <code class="tmpl" data-template="{{pod}}"></code>. If the pod has multiple containers,
+            kubectl uses the <code>kubectl.kubernetes.io/default-container</code> annotation, or errors
+            and prompts for <code>-c</code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--context=NAME</code></dt><dd>Kubeconfig context to use.</dd>
+            <dt><code>-n, --namespace=NAME</code></dt><dd>Target namespace.</dd>
+            <dt><code>--tail=N</code></dt><dd>Lines of recent log file to display. Defaults to <code>-1</code> (everything available).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-f, --follow</code></dt><dd>Stream new log lines as they appear (like <code>tail -f</code>).</dd>
+            <dt><code>-p, --previous</code></dt><dd>Logs from the previous container instance — essential after a crash.</dd>
+            <dt><code>--since=DURATION</code></dt><dd>Only logs newer than a relative time, e.g. <code>--since=1h</code> or <code>--since=10m</code>.</dd>
+            <dt><code>--timestamps</code></dt><dd>Prefix each line with an RFC3339 timestamp.</dd>
+            <dt><code>--all-containers</code></dt><dd>Logs from every container in the pod.</dd>
+            <dt><code>-l, --selector=KEY=VAL</code></dt><dd>Logs from every pod matching a label selector.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Follow logs for a specific container, including the previous instance — handy after a crash loop
+      where the live container has restarted but you want the logs that caused the crash:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="kubectl --context={{context}} -n {{namespace}} logs {{pod}} -c {{container}} --previous --tail={{tail_lines}} -f"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Streams logs from container <code class="tmpl" data-template="{{container}}"></code> in pod
+            <code class="tmpl" data-template="{{pod}}"></code>. <code>--previous</code> targets the
+            terminated instance, which is what you want after a crash; <code>-f</code> then follows the
+            replacement container's output once it starts.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--context=NAME</code></dt><dd>Kubeconfig context to use.</dd>
+            <dt><code>-n, --namespace=NAME</code></dt><dd>Target namespace.</dd>
+            <dt><code>-c, --container=NAME</code></dt><dd>Print the logs of this container.</dd>
+            <dt><code>-p, --previous</code></dt><dd>Print the logs of the previous (terminated) container instance.</dd>
+            <dt><code>--tail=N</code></dt><dd>Lines of recent log file to display.</dd>
+            <dt><code>-f, --follow</code></dt><dd>Stream new log lines as they appear.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--since-time=RFC3339</code></dt><dd>Logs newer than an absolute timestamp, e.g. <code>2024-08-30T06:00:00Z</code>.</dd>
+            <dt><code>--limit-bytes=N</code></dt><dd>Cap total bytes returned. Defaults to no limit.</dd>
+            <dt><code>--ignore-errors</code></dt><dd>Keep following even when transient errors occur.</dd>
+            <dt><code>--prefix</code></dt><dd>Prefix each line with the source pod and container name (useful with selectors).</dd>
+            <dt><code>--pod-running-timeout=DURATION</code></dt><dd>Wait up to this long for at least one pod to be running before erroring.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>4. Exec into a container</h2>
+    <p>Open an interactive shell. Most distroless images don't ship a shell; try <code class="inline">/bin/bash</code>,
+      <code class="inline">/bin/sh</code>, or <code class="inline">/busybox/sh</code> as fallbacks:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="kubectl --context={{context}} -n {{namespace}} exec -it {{pod}} -c {{container}} -- /bin/sh"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Attaches an interactive TTY to container
+            <code class="tmpl" data-template="{{container}}"></code> in pod
+            <code class="tmpl" data-template="{{pod}}"></code> and runs <code>/bin/sh</code>. The
+            <code>--</code> separator is required so any flags after it are passed to the shell, not to
+            kubectl.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--context=NAME</code></dt><dd>Kubeconfig context to use.</dd>
+            <dt><code>-n, --namespace=NAME</code></dt><dd>Target namespace.</dd>
+            <dt><code>-i, --stdin</code></dt><dd>Pass stdin to the container.</dd>
+            <dt><code>-t, --tty</code></dt><dd>Allocate a TTY (combine with <code>-i</code> for a usable shell).</dd>
+            <dt><code>-c, --container=NAME</code></dt><dd>Container to exec into. Defaults to the pod's default container annotation, otherwise the first container.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-q, --quiet</code></dt><dd>Only print output from the remote session — suppress kubectl's own status lines.</dd>
+            <dt><code>--pod-running-timeout=DURATION</code></dt><dd>How long to wait for the pod to be running before erroring.</dd>
+            <dt><code>-f, --filename=FILE</code></dt><dd>Resolve the target from a manifest file rather than a name.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Run a one-shot command without an interactive session — useful in scripts and CI:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="kubectl --context={{context}} -n {{namespace}} exec {{pod}} -c {{container}} -- ls -la /var/log"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Runs <code>ls -la /var/log</code> inside container
+            <code class="tmpl" data-template="{{container}}"></code> of pod
+            <code class="tmpl" data-template="{{pod}}"></code> and exits — no TTY, output streamed
+            straight back to your shell. Swap the command for anything available in the container image
+            (<code>cat</code>, <code>env</code>, <code>ps</code>, <code>nslookup</code>, etc.).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--context=NAME</code></dt><dd>Kubeconfig context to use.</dd>
+            <dt><code>-n, --namespace=NAME</code></dt><dd>Target namespace.</dd>
+            <dt><code>-c, --container=NAME</code></dt><dd>Container to run the command in.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-i, --stdin</code></dt><dd>Pipe stdin to the command, e.g. <code>echo hi | kubectl exec -i pod -- cat</code>.</dd>
+            <dt><code>-t, --tty</code></dt><dd>Allocate a TTY — only needed for interactive commands.</dd>
+            <dt><code>-q, --quiet</code></dt><dd>Suppress kubectl's own non-error output.</dd>
+            <dt><code>--pod-running-timeout=DURATION</code></dt><dd>Wait up to this long for the pod to start before erroring.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>5. Copy files in and out</h2>
+    <p>Pull a file from the pod down to your local machine. Requires <code class="inline">tar</code> to
+      be present in the container image:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="kubectl --context={{context}} -n {{namespace}} cp {{pod}}:{{remote_file}} {{local_file}} -c {{container}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Copies <code class="tmpl" data-template="{{remote_file}}"></code> out of container
+            <code class="tmpl" data-template="{{container}}"></code> in pod
+            <code class="tmpl" data-template="{{pod}}"></code> to local path
+            <code class="tmpl" data-template="{{local_file}}"></code>. Under the hood kubectl streams a
+            <code>tar</code> archive over an exec session, so the container image must contain a
+            <code>tar</code> binary.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--context=NAME</code></dt><dd>Kubeconfig context to use.</dd>
+            <dt><code>-n, --namespace=NAME</code></dt><dd>Target namespace.</dd>
+            <dt><code>-c, --container=NAME</code></dt><dd>Container to copy from / to. Defaults to the pod's default container.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--no-preserve</code></dt><dd>Do not preserve the copied file's ownership/permissions.</dd>
+            <dt><code>--retries=N</code></dt><dd>Retry the copy on failure. Negative values retry indefinitely; <code>0</code> disables retries (the default).</dd>
+          </dl>
+          <p>For symlinks, wildcards, or huge transfers, prefer
+            <code>kubectl exec pod -- tar cf - /path | tar xf -</code> on the local side.</p>
+        </div>
+      </details>
+    </div>
+
+    <p>Push a local file into the pod (e.g. a config snippet or debug tool):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="kubectl --context={{context}} -n {{namespace}} cp {{local_file}} {{pod}}:{{remote_file}} -c {{container}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Uploads local file <code class="tmpl" data-template="{{local_file}}"></code> to
+            <code class="tmpl" data-template="{{remote_file}}"></code> inside container
+            <code class="tmpl" data-template="{{container}}"></code> of pod
+            <code class="tmpl" data-template="{{pod}}"></code>. The target directory must already exist
+            and be writable by the container's user.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--context=NAME</code></dt><dd>Kubeconfig context to use.</dd>
+            <dt><code>-n, --namespace=NAME</code></dt><dd>Target namespace.</dd>
+            <dt><code>-c, --container=NAME</code></dt><dd>Destination container in the pod.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--no-preserve</code></dt><dd>Skip preserving file ownership/permissions inside the container.</dd>
+            <dt><code>--retries=N</code></dt><dd>Retry the transfer on failure (negative = infinite).</dd>
+          </dl>
+          <p>Path form <code>{{namespace}}/{{pod}}:{{remote_file}}</code> is also accepted — useful when
+            you don't want to pass <code>-n</code> separately.</p>
+        </div>
+      </details>
+    </div>
+
+    <h2>6. Port-forward</h2>
+    <p>Forward a local port to a pod's port — open a private tunnel without exposing the pod via a
+      Service. Leave it running in a separate terminal:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="kubectl --context={{context}} -n {{namespace}} port-forward pod/{{pod}} {{local_port}}:{{remote_port}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Binds local port <code class="tmpl" data-template="{{local_port}}"></code> on
+            <code>127.0.0.1</code> and forwards traffic to port
+            <code class="tmpl" data-template="{{remote_port}}"></code> inside pod
+            <code class="tmpl" data-template="{{pod}}"></code>. The session terminates if the selected
+            pod dies — rerun the command to resume forwarding.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--context=NAME</code></dt><dd>Kubeconfig context to use.</dd>
+            <dt><code>-n, --namespace=NAME</code></dt><dd>Target namespace.</dd>
+            <dt><code>LOCAL_PORT:REMOTE_PORT</code></dt><dd>Port pair. Use <code>:REMOTE_PORT</code> to let the OS pick a random local port.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--address=IP[,IP...]</code></dt><dd>Addresses to bind to. Defaults to <code>localhost</code>; use <code>0.0.0.0</code> to expose to the LAN (carefully).</dd>
+            <dt><code>--pod-running-timeout=DURATION</code></dt><dd>Wait up to this long for the pod to be running before failing.</dd>
+            <dt><code>deployment/NAME</code> / <code>service/NAME</code></dt><dd>Forward against a Deployment or Service instead of a pod; kubectl picks a backing pod.</dd>
+            <dt><code>NAMED_PORT</code></dt><dd>Use a Service's named port, e.g. <code>8443:https</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>7. Events and resource usage</h2>
+    <p>Recent events sorted by time — this surfaces scheduler decisions, image pulls, OOM kills, probe
+      failures, and evictions across the namespace:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="kubectl --context={{context}} -n {{namespace}} get events --sort-by=.lastTimestamp"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Lists events in namespace <code class="tmpl" data-template="{{namespace}}"></code> ordered
+            by their <code>lastTimestamp</code> field, so newest entries land at the bottom of the
+            table. Events are retained for one hour by default, so check soon after the incident.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--context=NAME</code></dt><dd>Kubeconfig context to use.</dd>
+            <dt><code>-n, --namespace=NAME</code></dt><dd>Target namespace.</dd>
+            <dt><code>--sort-by=JSONPATH</code></dt><dd>Sort the table by a field's JSONPath. <code>.lastTimestamp</code> gives chronological order.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>kubectl events --for pod/NAME</code></dt><dd>The newer <code>kubectl events</code> subcommand can filter directly to one resource.</dd>
+            <dt><code>--field-selector type=Warning</code></dt><dd>Only show Warning events (drop the Normal noise).</dd>
+            <dt><code>-A, --all-namespaces</code></dt><dd>Show events across every namespace.</dd>
+            <dt><code>-w, --watch</code></dt><dd>Stream new events as they arrive.</dd>
+            <dt><code>-o yaml</code></dt><dd>Full event objects, including the <code>involvedObject</code> reference and counts.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Live CPU/memory usage per container in the pod (requires metrics-server):</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="kubectl --context={{context}} -n {{namespace}} top pod {{pod}} --containers"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Shows current CPU/memory usage for pod
+            <code class="tmpl" data-template="{{pod}}"></code>, broken down by container. Numbers come
+            from the cluster's <code>metrics.k8s.io</code> API and lag pod creation by a couple of
+            minutes.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--context=NAME</code></dt><dd>Kubeconfig context to use.</dd>
+            <dt><code>-n, --namespace=NAME</code></dt><dd>Target namespace.</dd>
+            <dt><code>--containers</code></dt><dd>Print usage per container instead of one aggregated row per pod.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--sort-by=cpu|memory</code></dt><dd>Sort the table by resource usage — quick way to find the noisy neighbour.</dd>
+            <dt><code>--sum</code></dt><dd>Append a totals row at the bottom.</dd>
+            <dt><code>-A, --all-namespaces</code></dt><dd>Show pod usage across every namespace.</dd>
+            <dt><code>-l, --selector=KEY=VAL</code></dt><dd>Filter by label selector.</dd>
+            <dt><code>--no-headers</code></dt><dd>Suppress the header row — useful when piping to <code>awk</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>8. Delete (force-restart)</h2>
+    <p>Delete the pod. If it's owned by a Deployment / StatefulSet / ReplicaSet the controller will
+      recreate it — effectively a forced restart. The default
+      <code class="inline">--cascade=background</code> means dependents are GC'd asynchronously:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="kubectl --context={{context}} -n {{namespace}} delete pod {{pod}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Sends a graceful delete for pod
+            <code class="tmpl" data-template="{{pod}}"></code>. The pod receives <code>SIGTERM</code>,
+            its <code>terminationGracePeriodSeconds</code> elapses, and the kubelet then issues
+            <code>SIGKILL</code>. Use this — not <code>--force</code> — for almost every scenario; force
+            should be reserved for unreachable nodes.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>--context=NAME</code></dt><dd>Kubeconfig context to use.</dd>
+            <dt><code>-n, --namespace=NAME</code></dt><dd>Target namespace.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>--grace-period=N</code></dt><dd>Override the pod's termination grace period (seconds). <code>0</code> requires <code>--force</code>.</dd>
+            <dt><code>--now</code></dt><dd>Shorthand for grace-period <code>1</code> — quick but still graceful-ish.</dd>
+            <dt><code>--force</code></dt><dd>Immediately remove the API object without waiting for confirmation that processes have stopped. Risk of split-brain — use only on dead nodes.</dd>
+            <dt><code>--wait=false</code></dt><dd>Return immediately instead of blocking until the object is gone.</dd>
+            <dt><code>--dry-run=client|server</code></dt><dd>Show what would happen without actually deleting.</dd>
+            <dt><code>-l, --selector=KEY=VAL</code></dt><dd>Delete every pod matching a label selector.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <script>
+      (function () {
+        const DEFAULTS = {
+          context: "my-cluster",
+          namespace: "default",
+          pod: "my-app-7d9b4c5f8-xyz12",
+          container: "app",
+          local_port: "8080",
+          remote_port: "8080",
+          local_file: "./debug.log",
+          remote_file: "/var/log/app.log",
+          tail_lines: "100"
+        };
+
+        const inputs = document.querySelectorAll("input[data-var]");
+        const templated = document.querySelectorAll("[data-template]");
+
+        function readVars() {
+          const vars = {};
+          inputs.forEach((i) => {
+            vars[i.dataset.var] = i.value;
+          });
+          return vars;
+        }
+
+        function decode(html) {
+          const t = document.createElement("textarea");
+          t.innerHTML = html;
+          return t.value;
+        }
+
+        function render() {
+          const vars = readVars();
+          templated.forEach((el) => {
+            const tpl = decode(el.getAttribute("data-template"));
+            const out = tpl.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+              Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "{{" + key + "}}"
+            );
+            el.textContent = out;
+          });
+        }
+
+        inputs.forEach((i) => i.addEventListener("input", render));
+
+        document.querySelectorAll(".copy").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const block = btn.closest(".block");
+            const code = block ? block.querySelector("pre > code") : null;
+            const text = code ? code.textContent : "";
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch (e) {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              try { document.execCommand("copy"); } catch (_) {}
+              document.body.removeChild(ta);
+            }
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("copied");
+            }, 1200);
+          });
+        });
+
+        document.getElementById("reset-btn").addEventListener("click", () => {
+          inputs.forEach((i) => {
+            i.value = DEFAULTS[i.dataset.var] ?? "";
+          });
+          render();
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

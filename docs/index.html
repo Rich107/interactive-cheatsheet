@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>interactive-cheatsheet — live examples</title>
+    <meta name="description" content="Live examples produced by the interactive-cheatsheet Claude Code skill: interactive command references with live-updating variables and per-command help." />
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-2: #1c2230;
+        --border: #262d3b;
+        --text: #e6e8ee;
+        --muted: #8b94a7;
+        --accent: #7aa2ff;
+        --accent-2: #9ae6b4;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        line-height: 1.55;
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 48px 24px 80px;
+      }
+      h1 { font-size: 32px; margin: 0 0 8px; letter-spacing: -0.01em; }
+      h2 { font-size: 16px; margin: 36px 0 12px; color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.08em; }
+      p { color: var(--text); }
+      .lead { color: var(--muted); font-size: 16px; margin: 0 0 28px; max-width: 640px; }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+
+      .card-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+      @media (min-width: 720px) {
+        .card-grid { grid-template-columns: 1fr 1fr; }
+      }
+      .card {
+        display: block;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 22px 22px 20px;
+        transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+        text-decoration: none;
+        color: var(--text);
+        box-shadow: var(--shadow);
+      }
+      .card:hover {
+        border-color: var(--accent);
+        transform: translateY(-2px);
+        text-decoration: none;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+      }
+      .card .tag {
+        display: inline-block;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+      .card h3 {
+        margin: 0 0 6px;
+        font-size: 18px;
+        color: var(--accent);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .card p {
+        margin: 0;
+        color: var(--text);
+        font-size: 13.5px;
+        line-height: 1.5;
+      }
+      .card .vars {
+        margin-top: 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+
+      .footer {
+        margin-top: 56px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .footer a { color: var(--accent); }
+      code.inline {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>interactive-cheatsheet</h1>
+    <p class="lead">
+      Live examples produced by the
+      <a href="https://github.com/Rich107/interactive-cheatsheet">interactive-cheatsheet</a>
+      Claude Code skill. Each page has a sticky variables panel — change a value and every command
+      updates instantly. Click <strong>Explain</strong> under any command to see what each flag does,
+      sourced from the tool's real <code class="inline">--help</code> output.
+    </p>
+
+    <h2>Examples</h2>
+    <div class="card-grid">
+      <a class="card" href="./postgres-setup.html">
+        <span class="tag">Databases</span>
+        <h3>postgres-setup</h3>
+        <p>Create a new Postgres database, schema, and table from scratch — via <code class="inline">psql</code>, <code class="inline">createdb</code>, or a one-shot heredoc.</p>
+        <div class="vars">host · port · db_name · schema · table · owner</div>
+      </a>
+
+      <a class="card" href="./kubectl-pod-debugging.html">
+        <span class="tag">Kubernetes</span>
+        <h3>kubectl-pod-debugging</h3>
+        <p>Inspect, log, exec into, copy files to/from, and port-forward pods — everything you need when something is on fire in a cluster.</p>
+        <div class="vars">context · namespace · pod · container · local_port · tail_lines</div>
+      </a>
+
+      <a class="card" href="./ffmpeg-transcoding.html">
+        <span class="tag">Media</span>
+        <h3>ffmpeg-transcoding</h3>
+        <p>Transcode, trim, extract audio, resize, concatenate, and turn videos into GIFs — with CRF, presets, and hardware-encode options.</p>
+        <div class="vars">input_file · output_file · video_codec · crf · preset · width</div>
+      </a>
+    </div>
+
+    <h2>How to make your own</h2>
+    <p>
+      Install the skill (one-line clone — see the
+      <a href="https://github.com/Rich107/interactive-cheatsheet#install">README</a>), then in
+      Claude Code ask for something like:
+    </p>
+    <p style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; color: var(--accent-2);">
+      "make me a cheatsheet for git rescue commands"
+    </p>
+    <p>
+      Claude will ask which specific CLIs to cover, capture real <code class="inline">--help</code>
+      output for each, and write you both a markdown reference and an interactive HTML page like
+      the ones above.
+    </p>
+
+    <div class="footer">
+      <a href="https://github.com/Rich107/interactive-cheatsheet">github.com/Rich107/interactive-cheatsheet</a>
+      · MIT licensed
+    </div>
+  </body>
+</html>

@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Postgres setup — create database, schema, table</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-2: #1c2230;
+        --border: #262d3b;
+        --text: #e6e8ee;
+        --muted: #8b94a7;
+        --accent: #7aa2ff;
+        --accent-2: #9ae6b4;
+        --code-bg: #0b0d12;
+        --code-fg: #e6e8ee;
+        --btn: #2a3142;
+        --btn-hover: #38415a;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        line-height: 1.55;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 24px 80px;
+      }
+      h1 { font-size: 28px; margin: 0 0 6px; }
+      h2 { font-size: 20px; margin: 36px 0 10px; color: var(--accent); }
+      p, li { color: var(--text); }
+      .subtitle { color: var(--muted); margin: 0 0 24px; }
+      .vars {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 18px 8px;
+        position: sticky;
+        top: 12px;
+        z-index: 5;
+        box-shadow: var(--shadow);
+      }
+      .vars h2 { margin: 0 0 12px; font-size: 16px; color: var(--accent-2); }
+      .vars-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 14px;
+      }
+      .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+      .field label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .field input {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 120ms ease;
+      }
+      .field input:focus { border-color: var(--accent); }
+      .reset {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        margin-top: 6px;
+      }
+      .reset:hover { color: var(--text); border-color: var(--accent); }
+
+      .block {
+        position: relative;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin: 10px 0 18px;
+        overflow: hidden;
+      }
+      .block .lang {
+        position: absolute;
+        top: 8px;
+        left: 12px;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .block pre {
+        margin: 0;
+        padding: 30px 14px 14px;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: var(--code-fg);
+        white-space: pre;
+      }
+      .copy {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: var(--btn);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .copy:hover { background: var(--btn-hover); }
+      .copy.copied { background: #234e3c; color: #c6f6d5; border-color: #2f6b50; }
+
+      .explain {
+        border-top: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .explain > summary {
+        cursor: pointer;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        list-style: none;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: color 120ms ease;
+      }
+      .explain > summary::-webkit-details-marker { display: none; }
+      .explain > summary::before {
+        content: "▸";
+        font-size: 9px;
+        transition: transform 120ms ease;
+        display: inline-block;
+      }
+      .explain[open] > summary::before { transform: rotate(90deg); }
+      .explain > summary:hover { color: var(--text); }
+      .explain-body {
+        padding: 4px 14px 14px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text);
+      }
+      .explain-body h4 {
+        margin: 14px 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+      .explain-body p { margin: 4px 0 8px; }
+      .explain-body dl.flags {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(160px, max-content) 1fr;
+        gap: 4px 14px;
+      }
+      .explain-body dl.flags dt {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .explain-body dl.flags dt code {
+        background: transparent;
+        color: var(--accent);
+        padding: 0;
+        border: none;
+      }
+      .explain-body dl.flags dd { margin: 0; color: var(--text); }
+      .explain-body code.tmpl {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent-2);
+      }
+
+      hr.sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+      code.inline {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Postgres: create database, schema, and table</h1>
+    <p class="subtitle">
+      Change the variables below — every snippet on the page updates live. Click <strong>Explain</strong>
+      under any command to see what each flag does, plus other flags worth knowing.
+    </p>
+
+    <section class="vars" aria-label="Variables">
+      <h2>Variables</h2>
+      <div class="vars-grid">
+        <div class="field">
+          <label for="host">host</label>
+          <input id="host" data-var="host" value="localhost" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="port">port</label>
+          <input id="port" data-var="port" value="5432" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="admin_user">admin user</label>
+          <input id="admin_user" data-var="admin_user" value="postgres" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="admin_password">admin password</label>
+          <input id="admin_password" data-var="admin_password" value="password" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="db_name">database name</label>
+          <input id="db_name" data-var="db_name" value="my_new_db" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="schema">schema name</label>
+          <input id="schema" data-var="schema" value="my_schema" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="table">table name</label>
+          <input id="table" data-var="table" value="users" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="owner">owner role</label>
+          <input id="owner" data-var="owner" value="my_user" autocomplete="off" />
+        </div>
+      </div>
+      <button class="reset" id="reset-btn" type="button">Reset to defaults</button>
+    </section>
+
+    <h2>1. Connect to Postgres</h2>
+    <p>Connect as the admin user:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="psql -U {{admin_user}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Opens the PostgreSQL interactive terminal (psql) as
+            <code class="tmpl" data-template="{{admin_user}}"></code>. With no host given, psql connects
+            over a local Unix socket. Database defaults to one matching the username.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-U, --username=USERNAME</code></dt><dd>Database user name.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-d, --dbname=DBNAME</code></dt><dd>Connect to a specific database instead of the user-named default.</dd>
+            <dt><code>-l, --list</code></dt><dd>List available databases, then exit (no interactive session).</dd>
+            <dt><code>-w, --no-password</code></dt><dd>Never prompt for a password (useful in scripts where prompts hang).</dd>
+            <dt><code>-W, --password</code></dt><dd>Force a password prompt even if psql would otherwise skip it.</dd>
+            <dt><code>-X, --no-psqlrc</code></dt><dd>Skip <code>~/.psqlrc</code> — clean session without user customisations.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Or against a specific host/port:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="psql -h {{host}} -p {{port}} -U {{admin_user}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Connects to a TCP host instead of the default Unix socket — required when Postgres runs in
+            Docker, on another machine, or on a non-standard port.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-h, --host=HOSTNAME</code></dt><dd>Database server host or socket directory.</dd>
+            <dt><code>-p, --port=PORT</code></dt><dd>Database server port (Postgres default is 5432).</dd>
+            <dt><code>-U, --username=USERNAME</code></dt><dd>Database user name.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-c, --command=COMMAND</code></dt><dd>Run a single SQL command and exit — perfect for scripting.</dd>
+            <dt><code>-f, --file=FILENAME</code></dt><dd>Execute commands from a file, then exit.</dd>
+            <dt><code>-v, --set=NAME=VALUE</code></dt><dd>Set a psql variable, e.g. <code>-v ON_ERROR_STOP=1</code> to abort on first error.</dd>
+            <dt><code>-1, --single-transaction</code></dt><dd>Wrap the whole non-interactive session in one transaction.</dd>
+            <dt><code>--csv</code></dt><dd>Switch output to CSV — handy when piping query results elsewhere.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Using a connection string:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template='psql "postgres://{{admin_user}}:{{admin_password}}@{{host}}:{{port}}/postgres"'></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Passes connection info as a single URI. Useful when you already have a <code>DATABASE_URL</code>
+            from a cloud provider or <code>.env</code> file. The path component
+            (<code class="tmpl" data-template="/postgres"></code>) is the database name to connect to.</p>
+          <h4>URI parts</h4>
+          <dl class="flags">
+            <dt><code>postgres://</code></dt><dd>Scheme — <code>postgres://</code> and <code>postgresql://</code> are interchangeable.</dd>
+            <dt><code>user:password@</code></dt><dd>Credentials (URL-encode special characters).</dd>
+            <dt><code>host:port</code></dt><dd>Server location.</dd>
+            <dt><code>/dbname</code></dt><dd>Database to connect to. Omit to connect to the user-named default.</dd>
+            <dt><code>?param=value</code></dt><dd>Optional query params like <code>sslmode=require</code>, <code>application_name=…</code>, <code>connect_timeout=10</code>.</dd>
+          </dl>
+          <h4>Common query params</h4>
+          <dl class="flags">
+            <dt><code>sslmode=require</code></dt><dd>Force TLS (also: <code>verify-ca</code>, <code>verify-full</code>).</dd>
+            <dt><code>connect_timeout=10</code></dt><dd>Fail fast if the server isn't reachable.</dd>
+            <dt><code>application_name=my_app</code></dt><dd>Tag your session for easier debugging via <code>pg_stat_activity</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>2. Create the database</h2>
+    <p>From inside <code class="inline">psql</code> (connected to the default <code class="inline">postgres</code> database):</p>
+    <div class="block">
+      <span class="lang">sql</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="CREATE DATABASE {{db_name}};"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Creates a new database named <code class="tmpl" data-template="{{db_name}}"></code>. Without
+            extra clauses, it inherits encoding, collation, and template from <code>template1</code>.
+            The connected user must have <code>CREATEDB</code> privilege.</p>
+          <h4>Other clauses you might want</h4>
+          <dl class="flags">
+            <dt><code>OWNER role</code></dt><dd>Assign ownership to a specific role instead of the executing user.</dd>
+            <dt><code>ENCODING 'UTF8'</code></dt><dd>Character set for the database — UTF8 is almost always right.</dd>
+            <dt><code>TEMPLATE template0</code></dt><dd>Use the pristine template (needed when overriding locale settings).</dd>
+            <dt><code>LC_COLLATE / LC_CTYPE</code></dt><dd>Locale for sorting and character classification.</dd>
+            <dt><code>TABLESPACE name</code></dt><dd>Store the database on a non-default tablespace (separate disk, etc.).</dd>
+            <dt><code>CONNECTION LIMIT n</code></dt><dd>Cap concurrent connections to this database.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>With optional flags:</p>
+    <div class="block">
+      <span class="lang">sql</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="CREATE DATABASE {{db_name}}
+  OWNER {{owner}}
+  ENCODING 'UTF8'
+  LC_COLLATE 'en_US.UTF-8'
+  LC_CTYPE   'en_US.UTF-8'
+  TEMPLATE template0;"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Same as the minimal form, but pins ownership to
+            <code class="tmpl" data-template="{{owner}}"></code> and explicitly sets UTF-8 encoding + US
+            English locale. <code>TEMPLATE template0</code> is required whenever you override
+            locale/encoding because <code>template1</code> may have non-default settings baked in.</p>
+          <h4>Clauses used</h4>
+          <dl class="flags">
+            <dt><code>OWNER</code></dt><dd>Role that owns the new database (can drop, grant on, etc.).</dd>
+            <dt><code>ENCODING</code></dt><dd>Server-side character set.</dd>
+            <dt><code>LC_COLLATE</code></dt><dd>String sort order (e.g. accent handling, dictionary order).</dd>
+            <dt><code>LC_CTYPE</code></dt><dd>Character classification — what counts as a letter, digit, uppercase, etc.</dd>
+            <dt><code>TEMPLATE template0</code></dt><dd>Pristine template DB. Use whenever overriding locale or encoding.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Or from the shell, without entering psql:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="createdb -U {{admin_user}} {{db_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p><code>createdb</code> is a thin wrapper around <code>CREATE DATABASE</code> that you can call
+            directly from a shell — no psql session required. Useful in setup scripts and Dockerfiles.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-U, --username=USERNAME</code></dt><dd>User name to connect as.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-h, --host=HOSTNAME</code></dt><dd>Database server host or socket directory.</dd>
+            <dt><code>-p, --port=PORT</code></dt><dd>Server port (default 5432).</dd>
+            <dt><code>-O, --owner=OWNER</code></dt><dd>Database user to own the new database.</dd>
+            <dt><code>-E, --encoding=ENCODING</code></dt><dd>Character encoding (commonly <code>UTF8</code>).</dd>
+            <dt><code>-T, --template=TEMPLATE</code></dt><dd>Template database to copy (often <code>template0</code> when overriding locale).</dd>
+            <dt><code>-e, --echo</code></dt><dd>Print the SQL it actually runs — handy when learning or debugging.</dd>
+            <dt><code>--maintenance-db=DBNAME</code></dt><dd>Connect to a different existing database to issue the CREATE — useful when <code>postgres</code> isn't available.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>3. Connect to the new database</h2>
+    <p>Inside psql:</p>
+    <div class="block">
+      <span class="lang">sql</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="\c {{db_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>The <code>\c</code> (or <code>\connect</code>) backslash command reconnects the current psql
+            session to a different database — no need to quit and start a fresh process.</p>
+          <h4>Variations</h4>
+          <dl class="flags">
+            <dt><code>\c dbname</code></dt><dd>Switch databases as the current user.</dd>
+            <dt><code>\c dbname user</code></dt><dd>Switch databases and reconnect as a different user.</dd>
+            <dt><code>\c dbname user host port</code></dt><dd>Switch to a different server entirely in one go.</dd>
+            <dt><code>\conninfo</code></dt><dd>Print info about the current connection (handy after a switch).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Or start a fresh session:</p>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="psql -U {{admin_user}} -d {{db_name}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Spawns a new psql process pre-connected to
+            <code class="tmpl" data-template="{{db_name}}"></code>. Same as the connect step above, just with
+            <code>-d</code> added so you land directly in the right database.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-U, --username=USERNAME</code></dt><dd>Database user name.</dd>
+            <dt><code>-d, --dbname=DBNAME</code></dt><dd>Database name to connect to.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-h, --host=HOSTNAME</code></dt><dd>Server host (required for remote/containerised servers).</dd>
+            <dt><code>-p, --port=PORT</code></dt><dd>Server port (default 5432).</dd>
+            <dt><code>-E, --echo-hidden</code></dt><dd>Show the SQL behind backslash commands like <code>\dt</code> — great for learning.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>4. Create a schema</h2>
+    <div class="block">
+      <span class="lang">sql</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="CREATE SCHEMA {{schema}};"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Creates a named namespace inside the current database. Tables, views, and functions can be
+            grouped under it (<code>schema.table</code>) to avoid name clashes and to control access at a
+            coarser granularity than individual tables.</p>
+          <h4>Other clauses you might want</h4>
+          <dl class="flags">
+            <dt><code>AUTHORIZATION role</code></dt><dd>Assign ownership to a different role at creation time.</dd>
+            <dt><code>IF NOT EXISTS</code></dt><dd>No-op (with a notice) if the schema already exists — safe for idempotent migrations.</dd>
+            <dt><code>CREATE SCHEMA AUTHORIZATION role</code></dt><dd>Create a schema named after the role itself — common pattern for per-user namespaces.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Owned by a specific role:</p>
+    <div class="block">
+      <span class="lang">sql</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="CREATE SCHEMA {{schema}} AUTHORIZATION {{owner}};"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Creates the schema and assigns ownership to
+            <code class="tmpl" data-template="{{owner}}"></code> in one step. The owner can create objects
+            inside it and grant access to other roles.</p>
+        </div>
+      </details>
+    </div>
+
+    <p>Idempotent variant:</p>
+    <div class="block">
+      <span class="lang">sql</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="CREATE SCHEMA IF NOT EXISTS {{schema}};"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Skips the create (with a notice, no error) if a schema with that name already exists. Use this
+            in setup scripts you might re-run.</p>
+        </div>
+      </details>
+    </div>
+
+    <p>Optionally set it as the default for the current session:</p>
+    <div class="block">
+      <span class="lang">sql</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="SET search_path TO {{schema}}, public;"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Tells Postgres which schemas to look in when you write unqualified names (e.g. <code>users</code>
+            instead of <code>my_schema.users</code>). The first matching schema wins. Setting it lasts only
+            for the current session.</p>
+          <h4>Related</h4>
+          <dl class="flags">
+            <dt><code>SHOW search_path;</code></dt><dd>Inspect the current search path.</dd>
+            <dt><code>ALTER ROLE name SET search_path TO …</code></dt><dd>Persist the search path for a role across sessions.</dd>
+            <dt><code>ALTER DATABASE name SET search_path TO …</code></dt><dd>Persist it for everyone connecting to a database.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>5. Create a table</h2>
+    <div class="block">
+      <span class="lang">sql</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="CREATE TABLE {{schema}}.{{table}} (
+  id          BIGSERIAL PRIMARY KEY,
+  email       TEXT NOT NULL UNIQUE,
+  full_name   TEXT,
+  is_active   BOOLEAN NOT NULL DEFAULT true,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Creates <code class="tmpl" data-template="{{schema}}.{{table}}"></code> with an auto-incrementing
+            primary key, a unique email, audit timestamps, and an <code>is_active</code> soft-delete flag.</p>
+          <h4>Constraints used</h4>
+          <dl class="flags">
+            <dt><code>BIGSERIAL</code></dt><dd>Shorthand for <code>BIGINT NOT NULL DEFAULT nextval('seq')</code> — 64-bit auto-increment column. For Postgres 10+, prefer <code>GENERATED ALWAYS AS IDENTITY</code>.</dd>
+            <dt><code>PRIMARY KEY</code></dt><dd>Implies UNIQUE + NOT NULL and creates a btree index.</dd>
+            <dt><code>NOT NULL</code></dt><dd>Disallows NULLs at insert time.</dd>
+            <dt><code>UNIQUE</code></dt><dd>Adds a unique constraint (and supporting index).</dd>
+            <dt><code>DEFAULT</code></dt><dd>Server-side default if the column is omitted in an INSERT.</dd>
+            <dt><code>TIMESTAMPTZ</code></dt><dd>Timestamp with timezone — almost always preferable to plain <code>TIMESTAMP</code>.</dd>
+          </dl>
+          <h4>Other clauses you might want</h4>
+          <dl class="flags">
+            <dt><code>CHECK (expr)</code></dt><dd>Arbitrary row-level validation, e.g. <code>CHECK (length(email) &lt; 320)</code>.</dd>
+            <dt><code>REFERENCES other(id)</code></dt><dd>Inline foreign key.</dd>
+            <dt><code>GENERATED ALWAYS AS IDENTITY</code></dt><dd>Modern replacement for <code>SERIAL</code> / <code>BIGSERIAL</code> (SQL-standard).</dd>
+            <dt><code>IF NOT EXISTS</code></dt><dd>Idempotent variant of CREATE TABLE.</dd>
+            <dt><code>PARTITION BY RANGE/LIST (col)</code></dt><dd>Declarative partitioning for large tables.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>6. Verify</h2>
+    <div class="block">
+      <span class="lang">psql</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="\l                   -- list databases
+\dn                  -- list schemas in current DB
+\dt {{schema}}.*      -- list tables in the schema
+\d  {{schema}}.{{table}}  -- describe the table"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>psql backslash commands for introspection. They don't return rows like a SELECT — psql
+            generates the matching catalog query for you and pretty-prints the result.</p>
+          <h4>Commands used</h4>
+          <dl class="flags">
+            <dt><code>\l</code></dt><dd>List databases on the server.</dd>
+            <dt><code>\dn</code></dt><dd>List schemas in the current database.</dd>
+            <dt><code>\dt pattern</code></dt><dd>List tables matching a pattern (schema-qualified glob).</dd>
+            <dt><code>\d name</code></dt><dd>Describe a table/view/sequence — columns, indexes, constraints.</dd>
+          </dl>
+          <h4>Other introspection commands</h4>
+          <dl class="flags">
+            <dt><code>\du</code></dt><dd>List roles (users + groups).</dd>
+            <dt><code>\dp</code></dt><dd>Show table-level privileges.</dd>
+            <dt><code>\df</code></dt><dd>List functions.</dd>
+            <dt><code>\di</code></dt><dd>List indexes.</dd>
+            <dt><code>\d+ name</code></dt><dd>Verbose describe — includes storage info, comments.</dd>
+            <dt><code>\?</code></dt><dd>Show all backslash commands.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>7. Tear down (optional)</h2>
+    <div class="block">
+      <span class="lang">sql</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="DROP TABLE    {{schema}}.{{table}};
+DROP SCHEMA   {{schema}} CASCADE;
+DROP DATABASE {{db_name}};"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reverses the setup. Order matters: drop dependent objects (table) before their container
+            (schema, database). <code>DROP DATABASE</code> cannot run while any session is connected to that
+            database — disconnect first or use the optional clause below.</p>
+          <h4>Clauses used</h4>
+          <dl class="flags">
+            <dt><code>CASCADE</code></dt><dd>Also drop everything that depends on this object (tables in the schema, foreign keys, views, etc.).</dd>
+          </dl>
+          <h4>Other clauses you might want</h4>
+          <dl class="flags">
+            <dt><code>IF EXISTS</code></dt><dd>Don't error if the object is already gone — idempotent teardown.</dd>
+            <dt><code>RESTRICT</code> (default)</dt><dd>Refuse to drop if dependents exist.</dd>
+            <dt><code>DROP DATABASE … WITH (FORCE)</code></dt><dd>Postgres 13+ — terminate connected sessions, then drop.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <hr class="sep" />
+
+    <h2>One-shot version (no interactive psql)</h2>
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="createdb -U {{admin_user}} {{db_name}}
+
+psql -U {{admin_user}} -d {{db_name}} &lt;&lt;'SQL'
+CREATE SCHEMA {{schema}};
+
+CREATE TABLE {{schema}}.{{table}} (
+  id         BIGSERIAL PRIMARY KEY,
+  email      TEXT NOT NULL UNIQUE,
+  full_name  TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+SQL"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Two-step setup that needs no interactive psql session. The heredoc
+            (<code>&lt;&lt;'SQL' … SQL</code>) feeds the statements to psql on stdin. The single quotes around
+            the delimiter (<code>'SQL'</code>) disable shell variable expansion inside the body, so
+            <code>$</code> in your SQL is left alone.</p>
+          <h4>Useful additions</h4>
+          <dl class="flags">
+            <dt><code>-v ON_ERROR_STOP=1</code></dt><dd>Make psql exit non-zero on the first SQL error — essential in scripts.</dd>
+            <dt><code>-1</code> (single-transaction)</dt><dd>Wrap the whole heredoc in one transaction so a mid-script failure rolls everything back.</dd>
+            <dt><code>-e</code> / <code>-a</code></dt><dd>Echo each statement (or all input) for CI logs.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <script>
+      (function () {
+        const DEFAULTS = {
+          host: "localhost",
+          port: "5432",
+          admin_user: "postgres",
+          admin_password: "password",
+          db_name: "my_new_db",
+          schema: "my_schema",
+          table: "users",
+          owner: "my_user",
+        };
+
+        const inputs = document.querySelectorAll("input[data-var]");
+        const templated = document.querySelectorAll("[data-template]");
+
+        function readVars() {
+          const vars = {};
+          inputs.forEach((i) => {
+            vars[i.dataset.var] = i.value;
+          });
+          return vars;
+        }
+
+        function decode(html) {
+          const t = document.createElement("textarea");
+          t.innerHTML = html;
+          return t.value;
+        }
+
+        function render() {
+          const vars = readVars();
+          templated.forEach((el) => {
+            const tpl = decode(el.getAttribute("data-template"));
+            const out = tpl.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+              Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "{{" + key + "}}"
+            );
+            el.textContent = out;
+          });
+        }
+
+        inputs.forEach((i) => i.addEventListener("input", render));
+
+        document.querySelectorAll(".copy").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const block = btn.closest(".block");
+            const code = block ? block.querySelector("pre > code") : null;
+            const text = code ? code.textContent : "";
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch (e) {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              try { document.execCommand("copy"); } catch (_) {}
+              document.body.removeChild(ta);
+            }
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("copied");
+            }, 1200);
+          });
+        });
+
+        document.getElementById("reset-btn").addEventListener("click", () => {
+          inputs.forEach((i) => {
+            i.value = DEFAULTS[i.dataset.var] ?? "";
+          });
+          render();
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

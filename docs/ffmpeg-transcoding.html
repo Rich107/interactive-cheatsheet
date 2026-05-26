@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ffmpeg transcoding & media editing</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a22;
+        --panel-2: #1c2230;
+        --border: #262d3b;
+        --text: #e6e8ee;
+        --muted: #8b94a7;
+        --accent: #7aa2ff;
+        --accent-2: #9ae6b4;
+        --code-bg: #0b0d12;
+        --code-fg: #e6e8ee;
+        --btn: #2a3142;
+        --btn-hover: #38415a;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        line-height: 1.55;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 24px 80px;
+      }
+      h1 { font-size: 28px; margin: 0 0 6px; }
+      h2 { font-size: 20px; margin: 36px 0 10px; color: var(--accent); }
+      p, li { color: var(--text); }
+      .subtitle { color: var(--muted); margin: 0 0 24px; }
+      .vars {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 18px 8px;
+        position: sticky;
+        top: 12px;
+        z-index: 5;
+        box-shadow: var(--shadow);
+      }
+      .vars h2 { margin: 0 0 12px; font-size: 16px; color: var(--accent-2); }
+      .vars-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 14px;
+      }
+      .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+      .field label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .field input {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 120ms ease;
+      }
+      .field input:focus { border-color: var(--accent); }
+      .reset {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        margin-top: 6px;
+      }
+      .reset:hover { color: var(--text); border-color: var(--accent); }
+
+      .block {
+        position: relative;
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin: 10px 0 18px;
+        overflow: hidden;
+      }
+      .block .lang {
+        position: absolute;
+        top: 8px;
+        left: 12px;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .block pre {
+        margin: 0;
+        padding: 30px 14px 14px;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: var(--code-fg);
+        white-space: pre;
+      }
+      .copy {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: var(--btn);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .copy:hover { background: var(--btn-hover); }
+      .copy.copied { background: #234e3c; color: #c6f6d5; border-color: #2f6b50; }
+
+      .explain {
+        border-top: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .explain > summary {
+        cursor: pointer;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: var(--muted);
+        list-style: none;
+        user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: color 120ms ease;
+      }
+      .explain > summary::-webkit-details-marker { display: none; }
+      .explain > summary::before {
+        content: "▸";
+        font-size: 9px;
+        transition: transform 120ms ease;
+        display: inline-block;
+      }
+      .explain[open] > summary::before { transform: rotate(90deg); }
+      .explain > summary:hover { color: var(--text); }
+      .explain-body {
+        padding: 4px 14px 14px;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text);
+      }
+      .explain-body h4 {
+        margin: 14px 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+      .explain-body p { margin: 4px 0 8px; }
+      .explain-body dl.flags {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(160px, max-content) 1fr;
+        gap: 4px 14px;
+      }
+      .explain-body dl.flags dt {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .explain-body dl.flags dt code {
+        background: transparent;
+        color: var(--accent);
+        padding: 0;
+        border: none;
+      }
+      .explain-body dl.flags dd { margin: 0; color: var(--text); }
+      .explain-body code.tmpl {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--accent-2);
+      }
+
+      hr.sep { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+      code.inline {
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>ffmpeg transcoding & media editing</h1>
+    <p class="subtitle">
+      Change the variables below — every snippet on the page updates live. Click <strong>Explain</strong>
+      under any command to see what each flag does, plus other flags worth knowing. Flag descriptions
+      from docs — ffmpeg was not available locally.
+    </p>
+
+    <section class="vars" aria-label="Variables">
+      <h2>Variables</h2>
+      <div class="vars-grid">
+        <div class="field">
+          <label for="input_file">input file</label>
+          <input id="input_file" data-var="input_file" value="input.mp4" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="output_file">output file</label>
+          <input id="output_file" data-var="output_file" value="output.mp4" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="video_codec">video codec</label>
+          <input id="video_codec" data-var="video_codec" value="libx264" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="audio_codec">audio codec</label>
+          <input id="audio_codec" data-var="audio_codec" value="aac" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="video_bitrate">video bitrate</label>
+          <input id="video_bitrate" data-var="video_bitrate" value="2M" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="audio_bitrate">audio bitrate</label>
+          <input id="audio_bitrate" data-var="audio_bitrate" value="128k" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="crf">crf</label>
+          <input id="crf" data-var="crf" value="23" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="preset">preset</label>
+          <input id="preset" data-var="preset" value="medium" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="width">width (px)</label>
+          <input id="width" data-var="width" value="1280" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="start_time">start time</label>
+          <input id="start_time" data-var="start_time" value="00:00:10" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="duration">duration</label>
+          <input id="duration" data-var="duration" value="00:00:30" autocomplete="off" />
+        </div>
+      </div>
+      <button class="reset" id="reset-btn" type="button">Reset to defaults</button>
+    </section>
+
+    <h2>1. Inspect a media file</h2>
+    <p>Get a human-readable summary of streams, codecs, duration, and bitrate. <code class="inline">ffprobe</code>
+      produces structured output (use it in scripts); <code class="inline">ffmpeg -i</code> prints the same banner
+      info while also complaining that no output was specified.</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffprobe -hide_banner {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Runs ffprobe against <code class="tmpl" data-template="{{input_file}}"></code> and prints the
+            container metadata plus a short per-stream summary, without the verbose build/configuration banner.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-hide_banner</code></dt><dd>Suppress the version/build info printed at startup. Keeps stdout focused on the actual file metadata.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-v LEVEL</code></dt><dd>Log verbosity (<code>quiet</code>, <code>error</code>, <code>warning</code>, <code>info</code>, <code>debug</code>).</dd>
+            <dt><code>-show_format</code></dt><dd>Print container-level fields (duration, size, bitrate, tags).</dd>
+            <dt><code>-show_streams</code></dt><dd>Print one block per stream (codec, profile, resolution, sample rate).</dd>
+            <dt><code>-show_packets</code></dt><dd>Per-packet info — useful for seeking / debugging keyframe layout.</dd>
+            <dt><code>-of FMT</code></dt><dd>Output format: <code>default</code>, <code>json</code>, <code>csv</code>, <code>xml</code>, <code>flat</code>.</dd>
+            <dt><code>-select_streams S</code></dt><dd>Filter to one stream type, e.g. <code>v:0</code> or <code>a</code>.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Machine-readable JSON, ideal for piping into <code class="inline">jq</code>:</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffprobe -v error -show_format -show_streams -of json {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Emits the full container + stream metadata for <code class="tmpl" data-template="{{input_file}}"></code>
+            as JSON. Errors only — no chatty log lines on stderr to interfere with parsing.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-v error</code></dt><dd>Log level: only show fatal/error lines, suppress info and warnings.</dd>
+            <dt><code>-show_format</code></dt><dd>Include the container-level fields (filename, duration, size, bit_rate, tags).</dd>
+            <dt><code>-show_streams</code></dt><dd>Include one block per audio/video/subtitle stream.</dd>
+            <dt><code>-of json</code></dt><dd>Print output as JSON. Equivalent to <code>-print_format json</code>.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-show_chapters</code></dt><dd>List chapter markers (titles + timestamps).</dd>
+            <dt><code>-show_entries KEY</code></dt><dd>Restrict output to specific fields, e.g. <code>stream=codec_name,width,height</code>.</dd>
+            <dt><code>-count_frames</code></dt><dd>Count exact frame numbers per stream (slow — decodes the file).</dd>
+            <dt><code>-pretty</code></dt><dd>Format durations/bitrates as human-readable strings instead of raw numbers.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Quick inspection via ffmpeg itself (errors out at the end because no output is specified — that's expected):</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffmpeg -hide_banner -i {{input_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Asks ffmpeg to open <code class="tmpl" data-template="{{input_file}}"></code>. With no output file
+            specified, ffmpeg prints the input metadata, then exits with the message
+            <em>"At least one output file must be specified"</em>. Convenient one-liner when ffprobe isn't handy.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-hide_banner</code></dt><dd>Suppress the version/build info banner.</dd>
+            <dt><code>-i FILE</code></dt><dd>Input file. Repeat to add multiple inputs.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-loglevel LEVEL</code></dt><dd>Same as <code>-v</code>. Try <code>error</code> to silence the banner-like info lines too.</dd>
+            <dt><code>-stats</code></dt><dd>Show encoding progress on stderr (default for terminal output).</dd>
+            <dt><code>-nostdin</code></dt><dd>Disable stdin interaction — required when running in CI or under nohup.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>2. Simple transcode</h2>
+    <p>Re-encode to H.264 video + AAC audio in an MP4 container. Sensible defaults for streaming or broad
+      device compatibility.</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffmpeg -i {{input_file}} -c:v {{video_codec}} -c:a {{audio_codec}} -b:a {{audio_bitrate}} {{output_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Re-encodes <code class="tmpl" data-template="{{input_file}}"></code> to
+            <code class="tmpl" data-template="{{video_codec}}"></code> video and
+            <code class="tmpl" data-template="{{audio_codec}}"></code> audio at
+            <code class="tmpl" data-template="{{audio_bitrate}}"></code>, writing
+            <code class="tmpl" data-template="{{output_file}}"></code>. Container is inferred from the output
+            file extension. With no quality/bitrate flag, libx264 falls back to CRF 23.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-i FILE</code></dt><dd>Input file.</dd>
+            <dt><code>-c:v CODEC</code></dt><dd>Video codec — e.g. <code>libx264</code>, <code>libx265</code>, <code>copy</code>.</dd>
+            <dt><code>-c:a CODEC</code></dt><dd>Audio codec — e.g. <code>aac</code>, <code>libmp3lame</code>, <code>copy</code>.</dd>
+            <dt><code>-b:a BITRATE</code></dt><dd>Audio bitrate target (e.g. <code>128k</code>, <code>192k</code>).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-b:v BITRATE</code></dt><dd>Target video bitrate when not using CRF (e.g. <code>2M</code>).</dd>
+            <dt><code>-y</code></dt><dd>Overwrite the output file without prompting.</dd>
+            <dt><code>-n</code></dt><dd>Never overwrite — error out if output exists.</dd>
+            <dt><code>-movflags +faststart</code></dt><dd>Move the MP4 moov atom to the front so playback can start before the whole file is downloaded.</dd>
+            <dt><code>-pix_fmt yuv420p</code></dt><dd>Force a widely-compatible pixel format (some sources are yuv444p, which many players reject).</dd>
+            <dt><code>-map 0</code></dt><dd>Copy all streams (including subtitles, chapters) from the first input.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>3. Quality-targeted transcode (CRF)</h2>
+    <p>CRF (Constant Rate Factor) is the recommended quality knob for libx264/libx265. Lower CRF = higher
+      quality + larger file. Useful range is 18–28; 23 is the libx264 default. The <code class="inline">preset</code>
+      trades encoding speed against compression efficiency.</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffmpeg -i {{input_file}} -c:v {{video_codec}} -crf {{crf}} -preset {{preset}} -c:a {{audio_codec}} -b:a {{audio_bitrate}} {{output_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Encodes <code class="tmpl" data-template="{{input_file}}"></code> with
+            <code class="tmpl" data-template="{{video_codec}}"></code> targeting visual quality
+            CRF <code class="tmpl" data-template="{{crf}}"></code> at preset
+            <code class="tmpl" data-template="{{preset}}"></code>, re-encoding audio to
+            <code class="tmpl" data-template="{{audio_codec}}"></code> at
+            <code class="tmpl" data-template="{{audio_bitrate}}"></code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-crf N</code></dt><dd>Constant Rate Factor (x264/x265). Lower = better quality. libx264 default 23; libx265 default 28.</dd>
+            <dt><code>-preset NAME</code></dt><dd>Encoding speed/compression tradeoff: <code>ultrafast</code>, <code>superfast</code>, <code>veryfast</code>, <code>faster</code>, <code>fast</code>, <code>medium</code>, <code>slow</code>, <code>slower</code>, <code>veryslow</code>.</dd>
+            <dt><code>-c:v CODEC</code></dt><dd>Video codec — typically <code>libx264</code> or <code>libx265</code> for CRF mode.</dd>
+            <dt><code>-c:a CODEC</code></dt><dd>Audio codec.</dd>
+            <dt><code>-b:a BITRATE</code></dt><dd>Audio bitrate target.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-tune NAME</code></dt><dd>x264/x265 tuning: <code>film</code>, <code>animation</code>, <code>grain</code>, <code>stillimage</code>, <code>fastdecode</code>, <code>zerolatency</code>.</dd>
+            <dt><code>-profile:v NAME</code></dt><dd>H.264 profile: <code>baseline</code>, <code>main</code>, <code>high</code>. <code>main</code>/<code>high</code> for modern devices.</dd>
+            <dt><code>-level:v N</code></dt><dd>H.264 level cap (e.g. <code>4.0</code>) for old hardware decoders.</dd>
+            <dt><code>-maxrate VAL -bufsize VAL</code></dt><dd>Cap peak bitrate (capped-CRF mode) — useful for streaming.</dd>
+            <dt><code>-pass 1</code> / <code>-pass 2</code></dt><dd>Two-pass encode at a target average bitrate.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>4. Trim / clip</h2>
+    <p><strong>Fast seek</strong> (<code class="inline">-ss</code> before <code class="inline">-i</code>) combined
+      with <code class="inline">-c copy</code> produces a lossless clip without re-encoding, but the cut snaps to
+      the nearest keyframe — so the actual start may be a few seconds earlier than requested.</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffmpeg -ss {{start_time}} -i {{input_file}} -t {{duration}} -c copy {{output_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Seeks to <code class="tmpl" data-template="{{start_time}}"></code> in
+            <code class="tmpl" data-template="{{input_file}}"></code>, then copies
+            <code class="tmpl" data-template="{{duration}}"></code> of packets straight into
+            <code class="tmpl" data-template="{{output_file}}"></code> with no re-encoding.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-ss TIME</code></dt><dd>Seek to position. Placed <em>before</em> <code>-i</code> = fast input-level seek (keyframe-aligned).</dd>
+            <dt><code>-i FILE</code></dt><dd>Input file.</dd>
+            <dt><code>-t DURATION</code></dt><dd>Output duration limit (e.g. <code>00:00:30</code>, <code>30</code>).</dd>
+            <dt><code>-c copy</code></dt><dd>Stream-copy all codecs — no re-encoding. Shorthand for <code>-c:v copy -c:a copy -c:s copy</code>.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-to TIME</code></dt><dd>Stop at absolute timestamp (alternative to <code>-t</code> duration).</dd>
+            <dt><code>-accurate_seek</code></dt><dd>Default on. Pair with <code>-ss</code> after <code>-i</code> for frame accuracy.</dd>
+            <dt><code>-noaccurate_seek</code></dt><dd>Disable accurate seek for fastest seeking (very small quality risk on stream-copy).</dd>
+            <dt><code>-avoid_negative_ts make_zero</code></dt><dd>Normalise timestamps so cut clips start at 0 — fixes "first frame at -2s" muxer warnings.</dd>
+            <dt><code>-copyts</code></dt><dd>Keep original timestamps from the input instead of rebasing to zero.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p><strong>Slow seek</strong> (<code class="inline">-ss</code> after <code class="inline">-i</code>) is
+      frame-accurate but requires re-encoding:</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffmpeg -i {{input_file}} -ss {{start_time}} -t {{duration}} -c:v {{video_codec}} -crf {{crf}} -c:a {{audio_codec}} {{output_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Decodes <code class="tmpl" data-template="{{input_file}}"></code> from the beginning until
+            <code class="tmpl" data-template="{{start_time}}"></code>, then encodes
+            <code class="tmpl" data-template="{{duration}}"></code> worth of frames into
+            <code class="tmpl" data-template="{{output_file}}"></code>. Slower than the keyframe-aligned variant
+            but the first frame is exactly at the requested timestamp.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-i FILE</code></dt><dd>Input file.</dd>
+            <dt><code>-ss TIME</code></dt><dd>Seek to position. Placed <em>after</em> <code>-i</code> = decode-then-discard (frame-accurate).</dd>
+            <dt><code>-t DURATION</code></dt><dd>Output duration limit.</dd>
+            <dt><code>-c:v CODEC</code></dt><dd>Video codec to encode with.</dd>
+            <dt><code>-crf N</code></dt><dd>Quality target for the re-encode.</dd>
+            <dt><code>-c:a CODEC</code></dt><dd>Audio codec for the re-encode.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-force_key_frames TIME</code></dt><dd>Inject a keyframe at a specific timestamp — useful if you want subsequent stream-copy cuts to start cleanly here.</dd>
+            <dt><code>-ss TIME -i FILE -ss TIME</code></dt><dd>Two-stage seek: fast jump near the cut, then accurate seek the last bit — often the best of both worlds.</dd>
+            <dt><code>-shortest</code></dt><dd>End output at the shortest input stream — relevant when combining multiple inputs.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>5. Extract audio</h2>
+    <p>Strip the audio track to its own file with no re-encoding — original quality preserved. The output extension
+      must match the audio codec (AAC → <code class="inline">.m4a</code>, MP3 → <code class="inline">.mp3</code>,
+      Opus → <code class="inline">.opus</code>).</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffmpeg -i {{input_file}} -vn -c:a copy output.m4a"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Drops the video stream from <code class="tmpl" data-template="{{input_file}}"></code> and writes the
+            unchanged audio packets to <code class="inline">output.m4a</code>. Fastest possible audio extraction.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-i FILE</code></dt><dd>Input file.</dd>
+            <dt><code>-vn</code></dt><dd>Disable video — no video stream in the output.</dd>
+            <dt><code>-c:a copy</code></dt><dd>Stream-copy the audio (no re-encoding, no quality loss).</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-c:a libmp3lame -b:a BITRATE</code></dt><dd>Re-encode to MP3 at a chosen bitrate.</dd>
+            <dt><code>-c:a libopus -b:a BITRATE</code></dt><dd>Re-encode to Opus — better quality per bit than MP3/AAC.</dd>
+            <dt><code>-map 0:a:0</code></dt><dd>Pick a specific audio track when the input has multiple.</dd>
+            <dt><code>-ar RATE</code></dt><dd>Resample to a given sample rate (e.g. <code>44100</code>, <code>48000</code>).</dd>
+            <dt><code>-ac N</code></dt><dd>Set channel count (1 = mono, 2 = stereo).</dd>
+            <dt><code>-sn</code></dt><dd>Also disable subtitles, if the container has any.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Force MP3 output (re-encodes the audio):</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffmpeg -i {{input_file}} -vn -c:a libmp3lame -b:a 192k output.mp3"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Extracts and re-encodes the audio track from <code class="tmpl" data-template="{{input_file}}"></code>
+            to MP3 at 192k VBR-ish CBR. Use this when you need broad device compatibility.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-vn</code></dt><dd>Disable video output.</dd>
+            <dt><code>-c:a libmp3lame</code></dt><dd>Use the LAME MP3 encoder.</dd>
+            <dt><code>-b:a BITRATE</code></dt><dd>Target audio bitrate.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-q:a N</code></dt><dd>Quality-based VBR for libmp3lame (0 = best, 9 = worst; 2 is a common sweet spot).</dd>
+            <dt><code>-id3v2_version 3</code></dt><dd>Write ID3v2.3 tags (better Windows compatibility than v2.4).</dd>
+            <dt><code>-write_id3v1 1</code></dt><dd>Also write legacy ID3v1 tags.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>6. Change container without re-encoding</h2>
+    <p>If the existing codecs are legal in the target container, ffmpeg can re-mux instantly — no quality loss,
+      no CPU spent decoding/encoding. Common moves: <code class="inline">.mkv → .mp4</code> (H.264 + AAC),
+      <code class="inline">.mov → .mp4</code>, <code class="inline">.ts → .mp4</code>.</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffmpeg -i {{input_file}} -c copy {{output_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Re-muxes <code class="tmpl" data-template="{{input_file}}"></code> into a different container
+            (<code class="tmpl" data-template="{{output_file}}"></code>) without touching the encoded streams.
+            If the codecs don't fit the new container, ffmpeg will error out — switch from
+            <code class="inline">-c copy</code> to an explicit re-encode in that case.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-i FILE</code></dt><dd>Input file.</dd>
+            <dt><code>-c copy</code></dt><dd>Stream-copy every stream (video, audio, subtitles). Shorthand for <code>-c:v copy -c:a copy -c:s copy</code>.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-map 0</code></dt><dd>Copy all streams from the input, including chapters / data tracks.</dd>
+            <dt><code>-bsf:a aac_adtstoasc</code></dt><dd>Bitstream filter needed when copying AAC from MPEG-TS into MP4.</dd>
+            <dt><code>-movflags +faststart</code></dt><dd>Re-locate moov atom to the start of the file — required for progressive HTTP playback.</dd>
+            <dt><code>-fflags +genpts</code></dt><dd>Regenerate PTS — fixes mux errors from broken-timestamp inputs.</dd>
+            <dt><code>-f FORMAT</code></dt><dd>Force the output muxer when the extension is ambiguous (e.g. <code>-f mp4</code>).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>7. Resize / scale</h2>
+    <p>Scale video to a fixed width and let height be calculated. <code class="inline">-2</code> preserves the
+      aspect ratio and rounds the resulting height to an even number — required by H.264, which can't accept
+      odd dimensions.</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffmpeg -i {{input_file}} -vf scale={{width}}:-2 -c:v {{video_codec}} -crf {{crf}} -preset {{preset}} -c:a copy {{output_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Scales <code class="tmpl" data-template="{{input_file}}"></code> to width
+            <code class="tmpl" data-template="{{width}}"></code> (height auto-calculated to keep aspect ratio,
+            rounded to an even number), re-encodes the video with
+            <code class="tmpl" data-template="{{video_codec}}"></code> at CRF
+            <code class="tmpl" data-template="{{crf}}"></code>, and stream-copies the audio.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-vf FILTERGRAPH</code></dt><dd>Apply a video filtergraph. <code>scale=W:H</code> resizes; use <code>-1</code> for "auto, divisible by 1" or <code>-2</code> for "auto, even" (H.264-safe).</dd>
+            <dt><code>-c:v CODEC</code></dt><dd>Video codec for the re-encode.</dd>
+            <dt><code>-crf N</code></dt><dd>Quality target.</dd>
+            <dt><code>-preset NAME</code></dt><dd>Speed/efficiency tradeoff.</dd>
+            <dt><code>-c:a copy</code></dt><dd>Stream-copy audio — no re-encoding needed when only video changes.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>scale=W:H:flags=lanczos</code></dt><dd>Higher-quality scaling algorithm than the default bilinear.</dd>
+            <dt><code>scale=W:H:force_original_aspect_ratio=decrease</code></dt><dd>Fit inside the box without stretching — pair with <code>pad</code> to letterbox.</dd>
+            <dt><code>-vf "scale=W:H,format=yuv420p"</code></dt><dd>Chain filters with commas; force a player-friendly pixel format.</dd>
+            <dt><code>-aspect 16:9</code></dt><dd>Override the display aspect ratio in the output header.</dd>
+            <dt><code>-r FPS</code></dt><dd>Set output framerate.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>8. Concatenate files</h2>
+    <p>The concat <em>demuxer</em> is the right tool when all inputs share the same codecs, resolution, and
+      framerate — it's fast and lossless. First create a list file:</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="cat &gt; files.txt &lt;&lt;'EOF'
+file 'part1.mp4'
+file 'part2.mp4'
+file 'part3.mp4'
+EOF"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Writes a manifest with one <code class="inline">file 'path'</code> line per segment. Single-quoted
+            paths handle spaces; comments start with <code class="inline">#</code>. Relative paths are resolved
+            from the directory of <code class="inline">files.txt</code>.</p>
+          <h4>Manifest directives</h4>
+          <dl class="flags">
+            <dt><code>file 'PATH'</code></dt><dd>A segment to append. Paths are relative to the manifest unless absolute.</dd>
+            <dt><code>duration SECONDS</code></dt><dd>Override duration of the preceding file — useful for image slideshows.</dd>
+            <dt><code>inpoint TIME</code></dt><dd>Start reading the preceding file at this timestamp.</dd>
+            <dt><code>outpoint TIME</code></dt><dd>Stop reading the preceding file at this timestamp.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Then concatenate with stream copy — no re-encoding:</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffmpeg -f concat -safe 0 -i files.txt -c copy {{output_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Tells ffmpeg to use the concat <em>demuxer</em> over <code class="inline">files.txt</code> and
+            stream-copy the joined packets into <code class="tmpl" data-template="{{output_file}}"></code>.
+            Requires every input to have identical codec, resolution, and framerate — otherwise switch to the
+            concat <em>filter</em> (which re-encodes).</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-f concat</code></dt><dd>Force the concat demuxer as the input format.</dd>
+            <dt><code>-safe 0</code></dt><dd>Allow unsafe (absolute / relative-with-slashes) paths in the manifest.</dd>
+            <dt><code>-i FILE</code></dt><dd>The concat manifest itself.</dd>
+            <dt><code>-c copy</code></dt><dd>Stream-copy everything — no re-encoding.</dd>
+          </dl>
+          <h4>Other flags / approaches you might want</h4>
+          <dl class="flags">
+            <dt><code>-filter_complex "concat=n=N:v=1:a=1"</code></dt><dd>Use the concat <em>filter</em> when inputs differ (it re-encodes and resamples to match).</dd>
+            <dt><code>-fflags +genpts</code></dt><dd>Regenerate PTS if downstream players complain about timestamps.</dd>
+            <dt><code>-auto_convert 1</code></dt><dd>Concat-demuxer flag that injects bitstream filters automatically when needed (e.g. AAC ADTS → ASC).</dd>
+            <dt><code>-segment_time_metadata 1</code></dt><dd>Preserve per-segment timing metadata in the output.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>9. Generate an animated GIF (palette workflow)</h2>
+    <p>GIFs only support 256 colours, so quantisation quality matters. The two-pass palette workflow generates a
+      custom palette tuned for your specific clip, then renders the GIF using that palette — results are massively
+      better than the default global palette.</p>
+
+    <p>Pass 1 — generate the palette:</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffmpeg -ss {{start_time}} -t {{duration}} -i {{input_file}} -vf &quot;fps=15,scale={{width}}:-2:flags=lanczos,palettegen&quot; -y palette.png"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Reads <code class="tmpl" data-template="{{duration}}"></code> starting at
+            <code class="tmpl" data-template="{{start_time}}"></code> from
+            <code class="tmpl" data-template="{{input_file}}"></code>, downsamples to 15 fps + width
+            <code class="tmpl" data-template="{{width}}"></code>, then analyses the clip and emits an
+            optimal 256-colour palette to <code class="inline">palette.png</code>.</p>
+          <h4>Flags / filters used</h4>
+          <dl class="flags">
+            <dt><code>-ss TIME -t DURATION</code></dt><dd>Restrict input to the chosen window.</dd>
+            <dt><code>-vf FILTERGRAPH</code></dt><dd>Video filter chain.</dd>
+            <dt><code>fps=N</code></dt><dd>Drop framerate (GIFs rarely need &gt; 15 fps; lower fps = smaller file).</dd>
+            <dt><code>scale=W:-2:flags=lanczos</code></dt><dd>Resize with the Lanczos algorithm.</dd>
+            <dt><code>palettegen</code></dt><dd>Analyse the input and emit a 256-colour palette as a PNG.</dd>
+            <dt><code>-y</code></dt><dd>Overwrite <code>palette.png</code> if it exists.</dd>
+          </dl>
+          <h4>Other options you might want</h4>
+          <dl class="flags">
+            <dt><code>palettegen=max_colors=N</code></dt><dd>Cap colours below 256 — produces smaller files at lower quality.</dd>
+            <dt><code>palettegen=stats_mode=diff</code></dt><dd>Weight palette to moving (diff) regions — best for talking-head video.</dd>
+            <dt><code>palettegen=reserve_transparent=1</code></dt><dd>Reserve a palette slot for transparency.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>Pass 2 — apply the palette:</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffmpeg -ss {{start_time}} -t {{duration}} -i {{input_file}} -i palette.png -filter_complex &quot;fps=15,scale={{width}}:-2:flags=lanczos[x];[x][1:v]paletteuse&quot; -y output.gif"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Renders <code class="inline">output.gif</code> from
+            <code class="tmpl" data-template="{{input_file}}"></code>, re-using the palette generated in pass 1.
+            The <code class="inline">filter_complex</code> chain downscales the video, labels the result
+            <code class="inline">[x]</code>, then feeds <code class="inline">[x]</code> plus the palette
+            (<code class="inline">[1:v]</code>) into <code class="inline">paletteuse</code>.</p>
+          <h4>Flags / filters used</h4>
+          <dl class="flags">
+            <dt><code>-i FILE</code></dt><dd>First input is the source video; second input is <code>palette.png</code>.</dd>
+            <dt><code>-filter_complex GRAPH</code></dt><dd>Multi-input filter graph syntax. <code>[label]</code> names intermediate streams.</dd>
+            <dt><code>paletteuse</code></dt><dd>Quantise the video to the given palette.</dd>
+            <dt><code>-y</code></dt><dd>Overwrite <code>output.gif</code> if it exists.</dd>
+          </dl>
+          <h4>Other options you might want</h4>
+          <dl class="flags">
+            <dt><code>paletteuse=dither=NAME</code></dt><dd>Dithering method: <code>bayer</code>, <code>floyd_steinberg</code>, <code>sierra2</code>, <code>none</code>. <code>bayer:bayer_scale=5</code> often looks great.</dd>
+            <dt><code>paletteuse=diff_mode=rectangle</code></dt><dd>Only re-quantise changed regions — smaller files for slow-moving footage.</dd>
+            <dt><code>paletteuse=new=1</code></dt><dd>Allow palette to vary per frame (use with <code>palettegen=stats_mode=single</code>).</dd>
+            <dt><code>-loop N</code></dt><dd>Loop count (0 = infinite, default for GIF).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <h2>10. Hardware encoder (macOS VideoToolbox)</h2>
+    <p>Apple's VideoToolbox encoders (<code class="inline">h264_videotoolbox</code>,
+      <code class="inline">hevc_videotoolbox</code>) offload encoding to the GPU / dedicated media engine.
+      Encoding is far faster than libx264 but per-bit quality is lower — best for bulk transcodes where you
+      have bitrate to spare.</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffmpeg -i {{input_file}} -c:v h264_videotoolbox -b:v {{video_bitrate}} -c:a {{audio_codec}} -b:a {{audio_bitrate}} {{output_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Encodes <code class="tmpl" data-template="{{input_file}}"></code> using the macOS hardware H.264
+            encoder at <code class="tmpl" data-template="{{video_bitrate}}"></code>, with
+            <code class="tmpl" data-template="{{audio_codec}}"></code> audio at
+            <code class="tmpl" data-template="{{audio_bitrate}}"></code>.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-c:v h264_videotoolbox</code></dt><dd>macOS hardware H.264 encoder. CRF is <em>not</em> supported here — use <code>-b:v</code> or <code>-q:v</code>.</dd>
+            <dt><code>-b:v BITRATE</code></dt><dd>Target video bitrate (the main quality knob for VideoToolbox).</dd>
+            <dt><code>-c:a CODEC</code></dt><dd>Audio codec.</dd>
+            <dt><code>-b:a BITRATE</code></dt><dd>Audio bitrate.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-c:v hevc_videotoolbox</code></dt><dd>HEVC variant — smaller files at the same visual quality on supported devices.</dd>
+            <dt><code>-tag:v hvc1</code></dt><dd>Required for Apple devices to recognise HEVC tracks in MP4 (otherwise tagged <code>hev1</code>).</dd>
+            <dt><code>-q:v N</code></dt><dd>Quality-style knob (0–100) — alternative to bitrate. Higher = better.</dd>
+            <dt><code>-allow_sw 1</code></dt><dd>Fall back to software encoder if hardware path is unavailable.</dd>
+            <dt><code>-realtime 1</code></dt><dd>Tell the hardware encoder to prioritise low latency over efficiency.</dd>
+            <dt><code>-profile:v main</code></dt><dd>H.264 profile selector (<code>baseline</code>, <code>main</code>, <code>high</code>).</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <p>HEVC variant with the Apple-compatible <code class="inline">hvc1</code> tag:</p>
+
+    <div class="block">
+      <span class="lang">bash</span>
+      <button class="copy" type="button">Copy</button>
+      <pre><code data-template="ffmpeg -i {{input_file}} -c:v hevc_videotoolbox -b:v {{video_bitrate}} -tag:v hvc1 -c:a {{audio_codec}} -b:a {{audio_bitrate}} {{output_file}}"></code></pre>
+      <details class="explain">
+        <summary>Explain</summary>
+        <div class="explain-body">
+          <p>Same as the previous command but emits HEVC (H.265). <code class="inline">-tag:v hvc1</code> ensures
+            QuickTime / iOS players recognise the track — without it the file plays in ffplay/VLC but not in
+            stock Apple software.</p>
+          <h4>Flags used</h4>
+          <dl class="flags">
+            <dt><code>-c:v hevc_videotoolbox</code></dt><dd>macOS hardware HEVC encoder.</dd>
+            <dt><code>-b:v BITRATE</code></dt><dd>Target video bitrate.</dd>
+            <dt><code>-tag:v hvc1</code></dt><dd>Force the <code>hvc1</code> codec tag in the MP4 track header (Apple-friendly variant).</dd>
+            <dt><code>-c:a CODEC -b:a BITRATE</code></dt><dd>Audio codec + bitrate.</dd>
+          </dl>
+          <h4>Other flags you might want</h4>
+          <dl class="flags">
+            <dt><code>-pix_fmt p010le</code></dt><dd>10-bit HEVC pixel format — required for HDR / Dolby Vision pipelines.</dd>
+            <dt><code>-color_primaries / -color_trc / -colorspace</code></dt><dd>Tag colour metadata (BT.709 for SDR, BT.2020 for HDR).</dd>
+            <dt><code>-movflags +faststart</code></dt><dd>Front-load the moov atom for progressive playback.</dd>
+          </dl>
+        </div>
+      </details>
+    </div>
+
+    <script>
+      (function () {
+        const DEFAULTS = {
+          input_file: "input.mp4",
+          output_file: "output.mp4",
+          video_codec: "libx264",
+          audio_codec: "aac",
+          video_bitrate: "2M",
+          audio_bitrate: "128k",
+          crf: "23",
+          preset: "medium",
+          width: "1280",
+          start_time: "00:00:10",
+          duration: "00:00:30"
+        };
+
+        const inputs = document.querySelectorAll("input[data-var]");
+        const templated = document.querySelectorAll("[data-template]");
+
+        function readVars() {
+          const vars = {};
+          inputs.forEach((i) => {
+            vars[i.dataset.var] = i.value;
+          });
+          return vars;
+        }
+
+        function decode(html) {
+          const t = document.createElement("textarea");
+          t.innerHTML = html;
+          return t.value;
+        }
+
+        function render() {
+          const vars = readVars();
+          templated.forEach((el) => {
+            const tpl = decode(el.getAttribute("data-template"));
+            const out = tpl.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+              Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "{{" + key + "}}"
+            );
+            el.textContent = out;
+          });
+        }
+
+        inputs.forEach((i) => i.addEventListener("input", render));
+
+        document.querySelectorAll(".copy").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const block = btn.closest(".block");
+            const code = block ? block.querySelector("pre > code") : null;
+            const text = code ? code.textContent : "";
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch (e) {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.select();
+              try { document.execCommand("copy"); } catch (_) {}
+              document.body.removeChild(ta);
+            }
+            const original = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("copied");
+            }, 1200);
+          });
+        });
+
+        document.getElementById("reset-btn").addEventListener("click", () => {
+          inputs.forEach((i) => {
+            i.value = DEFAULTS[i.dataset.var] ?? "";
+          });
+          render();
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>
